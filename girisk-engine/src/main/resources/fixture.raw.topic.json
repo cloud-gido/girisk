@@ -1,0 +1,52 @@
+{
+    "Header": {
+        "MessageGuid": "b8c154a2-4eba-46a4-9203-d0133b4069ce",
+        "TimeStampUtc": "2026-05-08T01:30:08.3197063Z",
+        "Retry": 0
+    },
+    "Fixture": {
+        "Id": 13862506,
+        "Name": "Árabe Unido Reserves v San Martin FC",
+        "FixtureType": "Match",
+        "Status": "Scheduled",
+        "StartTimeUtc": "2026-05-09T01:30:00Z",
+        "Sport": {
+            "Id": 10,
+            "Name": "Football"
+        },
+        "Competition": {
+            "Id": 15114,
+            "Name": "Panama Liga Prom",
+            "Region": {
+                "Id": 121,
+                "Name": "Panama"
+            }
+        },
+        "Season": {
+            "Id": 170207,
+            "Name": "2026 Panama Liga Prom"
+        },
+        "Round": {
+            "Id": 1494195,
+            "Name": "Semi Finals"
+        },
+        "Competitors": [
+            {
+                "Id": 586887,
+                "Name": "Árabe Unido Reserves",
+                "HomeAway": "Home",
+                "Gender": "Male",
+                "AgeCategory": "U18",
+                "CompetitorType": "Team"
+            },
+            {
+                "Id": 967529,
+                "Name": "San Martin FC",
+                "HomeAway": "Away",
+                "Gender": "Male",
+                "AgeCategory": "Senior",
+                "CompetitorType": "Team"
+            }
+        ]
+    }
+}

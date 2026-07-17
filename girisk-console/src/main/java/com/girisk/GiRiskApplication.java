@@ -1,0 +1,13 @@
+package com.girisk;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+@org.springframework.scheduling.annotation.EnableScheduling
+public class GiRiskApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(GiRiskApplication.class, args);
+    }
+}

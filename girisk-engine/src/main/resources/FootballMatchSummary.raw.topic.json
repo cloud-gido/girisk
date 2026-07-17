@@ -1,0 +1,180 @@
+{
+  "Header": {
+    "MessageGuid": "1f0a5617-6d87-4d23-ab0d-7740da1d13eb",
+    "TimeStampUtc": "2026-05-12T07:40:15.0290107Z",
+    "Retry": 0
+  },
+  "FootballMatchSummary": {
+    "CustomerId": 74120,
+    "FixtureId": "13883500",
+    "CurrentPhase": "FirstHalf",
+    "Clock": {
+      "TimeElapsedInPhase": "00:00:00",
+      "TimestampUtc": "2026-05-12T07:02:58.392Z",
+      "IsClockRunning": true
+    },
+    "CurrentDangerState": "HomeAttack",
+    "CurrentBookingState": "Safe",
+    "CurrentVarState": "Safe",
+    "CurrentPenaltyRiskState": "Safe",
+    "VarReason": "NotSet",
+    "VarOutcome": "NotSet",
+    "StartTimes": {
+      "FirstHalf": "2026-05-12T07:02:58.392Z"
+    },
+    "StoppageTimes": {
+
+    },
+    "Goals": {
+      "Score": {
+        "Home": 1,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "YellowCards": {
+      "Score": {
+        "Home": 1,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "SecondYellowCards": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "StraightRedCards": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "Substitutions": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "ShotsOnTarget": {
+      "Score": {
+        "Home": 2,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "ShotsOffTarget": {
+      "Score": {
+        "Home": 1,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "ShotsOffWoodwork": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "BlockedShots": {
+      "Score": {
+        "Home": 1,
+        "Away": 1
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "Corners": {
+      "Score": {
+        "Home": 2,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "PenaltiesAwarded": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "Fouls": {
+      "Score": {
+        "Home": 3,
+        "Away": 2
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "Offsides": {
+      "Score": {
+        "Home": 4,
+        "Away": 1
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "GoalKicks": {
+      "Score": {
+        "Home": 1,
+        "Away": 3
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "MissedPenalties": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "SavedPenalties": {
+      "Score": {
+        "Home": 0,
+        "Away": 0
+      },
+      "IsCollected": false,
+      "IsReliable": true
+    },
+    "ThrowIns": {
+      "Score": {
+        "Home": 24,
+        "Away": 5
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "KickOffs": {
+      "Score": {
+        "Home": 0,
+        "Away": 2
+      },
+      "IsCollected": true,
+      "IsReliable": true
+    },
+    "IsSecondLeg": false,
+    "NormalTimeHalfDuration": "00:45:00",
+    "ExtraTimeHalfDuration": "00:15:00",
+    "CanGoToExtraTime": false,
+    "CanGoStraightToPenaltiesAfterNormalTime": false,
+    "CanGoToPenalties": false,
+    "MessageTimestampUtc": "2026-05-12T07:40:14.988Z"
+  }
+}

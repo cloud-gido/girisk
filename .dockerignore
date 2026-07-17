@@ -1,0 +1,12 @@
+node_modules
+frontend/node_modules
+.git
+data
+*.iml
+.idea
+logs
+.girisk.pid
+
+# 保留预构建 jar 供 Docker 打包
+target/**
+!target/girisk-1.0.0.jar

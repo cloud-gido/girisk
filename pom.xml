@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.girisk</groupId>
+    <artifactId>girisk</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>girisk</name>
+    <description>GiRisk (GIRISK) monorepo: Console + Flink decision Engine — gido suite</description>
+
+    <modules>
+        <module>girisk-common</module>
+        <module>girisk-console</module>
+        <module>girisk-engine</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <girisk.version>1.0.0</girisk.version>
+    </properties>
+</project>

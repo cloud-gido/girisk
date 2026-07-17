@@ -1,0 +1,37 @@
+# 复制为 kafka-client.properties 后填写，再 mvn package 打进 JAR。
+# 平台无法配参数/环境变量时使用；勿把含密码的文件提交 Git。
+#
+# 优先级：程序参数 --kafka.* > 环境变量 > 本文件 > 代码默认
+#
+# --- 生产 MSK（SASL_SSL，示例主机名请换成你们集群的 bootstrap）---
+# bootstrap.servers=b-1.xxx.c4.kafka.sa-east-1.amazonaws.com:9096,b-2.xxx:9096,b-3.xxx:9096
+# security.protocol=SASL_SSL
+# sasl.mechanism=SCRAM-SHA-512
+# sasl.username=你的SCRAM用户名
+# sasl.password=你的SCRAM密码
+#
+# --- 开发 Kafka（PLAINTEXT，建议不要打进 JAR，改用程序参数）---
+# --bootstrap 10.0.0.10:30992 --kafka.security.protocol PLAINTEXT
+
+# 生产 MSK bootstrap（建议 b-1,b-2,b-3 全量）
+bootstrap.servers=b-1.gamelinelabprodkafkaka.d4kjds.c4.kafka.sa-east-1.amazonaws.com:9096,b-2.gamelinelabprodkafkaka.d4kjds.c4.kafka.sa-east-1.amazonaws.com:9096,b-3.gamelinelabprodkafkaka.d4kjds.c4.kafka.sa-east-1.amazonaws.com:9096
+
+security.protocol=SASL_SSL
+sasl.mechanism=SCRAM-SHA-512
+
+# 方式一：直接写 JAAS（注意分号结尾）
+# sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username="user" password="pass";
+
+# 方式二：分开写用户名密码（推荐）
+sasl.username=你的SCRAM用户名
+sasl.password=你的SCRAM密码
+
+# MSK 推荐（缓解 listNodes / metadata 超时）
+client.dns.lookup=use_all_dns_ips
+request.timeout.ms=60000
+default.api.timeout.ms=120000
+socket.connection.setup.timeout.ms=30000
+
+# MSK 通常不需要；自签证书集群再配
+# ssl.truststore.location=/path/to/truststore.jks
+# ssl.truststore.password=

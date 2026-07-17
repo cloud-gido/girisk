@@ -1,0 +1,39 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: football-order-kafka-job
+  namespace: flink
+spec:
+  image: football-order-kafka:dev
+  imagePullPolicy: IfNotPresent
+  flinkVersion: v2_0
+  serviceAccount: flink
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+  jobManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+    replicas: 1
+  job:
+    jarURI: local:///opt/flink/usrlib/app.jar
+    entryClass: com.girisk.flink.risk.FootballOrderKafkaJob
+    parallelism: 2
+    upgradeMode: stateless
+    args:
+      - "--bootstrap"
+      - "host.docker.internal:9092"
+      - "--source.topic"
+      - "football.order"
+      - "--group.id"
+      - "girisk-engine-local"
+      - "--offset"
+      - "latest"
+      - "--source.accept.csv"
+      - "true"
+      - "--limit.enabled"
+      - "true"

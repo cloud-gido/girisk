@@ -1,0 +1,33 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flink-developer
+  namespace: flink
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "configmaps", "secrets", "events"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["flink.apache.org"]
+    resources:
+      - flinkdeployments
+      - flinksessionjobs
+      - flinkstatesnapshots
+      - flinkbluegreendeployments
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-team-binding
+  namespace: flink
+subjects:
+  - kind: Group
+    name: flink-team
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: flink-developer
+  apiGroup: rbac.authorization.k8s.io

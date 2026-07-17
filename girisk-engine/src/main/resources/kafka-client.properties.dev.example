@@ -1,0 +1,8 @@
+# 开发环境 PLAINTEXT，不要复制为 kafka-client.properties 打进生产 JAR。
+# 本地 IDE / flink run 推荐直接用程序参数，避免与 MSK 配置混用：
+#
+#   --bootstrap 10.0.0.10:30992
+#   --kafka.security.protocol PLAINTEXT
+
+bootstrap.servers=10.0.0.10:30992
+security.protocol=PLAINTEXT

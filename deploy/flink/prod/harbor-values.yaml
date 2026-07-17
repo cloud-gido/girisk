@@ -1,0 +1,48 @@
+# Harbor @ harbor.yfls.internal
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    certSource: secret
+    secret:
+      secretName: harbor-tls
+  ingress:
+    hosts:
+      core: harbor.yfls.internal
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: yfls-ca
+
+externalURL: https://harbor.yfls.internal
+
+persistence:
+  enabled: true
+  persistentVolumeClaim:
+    registry:
+      size: 200Gi
+    jobservice:
+      size: 5Gi
+    database:
+      size: 10Gi
+    redis:
+      size: 5Gi
+
+harborAdminPassword: "ChangeMe-Harbor-Admin-2026"
+
+# 生产请改密码并走 LDAP/OIDC
+secretKey: "ChangeMe-Harbor-Secret-Key-32chars!!"
+
+trivy:
+  enabled: true
+
+notary:
+  enabled: false
+
+chartmuseum:
+  enabled: false
+
+metrics:
+  enabled: true
+
+# 创建项目 flink 后，为 GitLab CI 建 Robot Account:
+#   项目 flink → Robot Accounts → robot$flink+ci-deploy (push+pull)

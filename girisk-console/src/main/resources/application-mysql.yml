@@ -1,0 +1,19 @@
+# MySQL 生产/联调 profile（配合 docker-compose mysql）
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/riskdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${MYSQL_USER:risk}
+    password: ${MYSQL_PASSWORD:risk}
+  sql:
+    init:
+      mode: always
+      continue-on-error: false
+
+girisk:
+  redis:
+    enabled: ${REDIS_ENABLED:false}
+  kafka:
+    enabled: ${KAFKA_ENABLED:false}
+  tenant:
+    enforce: true

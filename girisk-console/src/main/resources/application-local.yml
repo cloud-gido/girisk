@@ -1,0 +1,29 @@
+# 本地联调：H2 内存库，关 Redis/Kafka
+spring:
+  datasource:
+    url: jdbc:h2:mem:girisk;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  sql:
+    init:
+      mode: always
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+
+girisk:
+  redis:
+    enabled: false
+  kafka:
+    enabled: false
+  sports:
+    # 本地无 Flink 时保留本仓体育同步裁决，便于投注试算
+    online-decide-enabled: true
+  tenant:
+    enforce: false

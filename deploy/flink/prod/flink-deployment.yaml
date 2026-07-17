@@ -1,0 +1,97 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: football-order-kafka-job
+  namespace: flink
+  labels:
+    app: football-order-kafka
+    team: girisk
+spec:
+  image: harbor.yfls.internal/flink/football-order-kafka:1.0.0
+  imagePullPolicy: IfNotPresent
+  flinkVersion: v2_0
+  serviceAccount: flink
+  ingress:
+    template: "girisk-engine.yfls.internal"
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: yfls-ca
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    state.backend.type: rocksdb
+    state.checkpoints.dir: s3://flink-checkpoints/prod/football-order/checkpoints
+    state.savepoints.dir: s3://flink-checkpoints/prod/football-order/savepoints
+    s3.endpoint: http://minio.minio.svc.cluster.local:9000
+    s3.path-style-access: "true"
+    s3.access-key: flink-minio-admin
+    s3.secret-key: ChangeMe-MinIO-2026
+    execution.checkpointing.interval: "60s"
+    execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+    kubernetes.operator.periodic.savepoint.interval: "6h"
+    kubernetes.operator.savepoint.history.max.age: "7d"
+  podTemplate:
+    spec:
+      imagePullSecrets:
+        - name: harbor-pull-secret
+      containers:
+        - name: flink-main-container
+          env:
+            - name: ENABLE_BUILT_IN_PLUGINS
+              value: "flink-s3-fs-hadoop-2.0.1.jar"
+  jobManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+    replicas: 1
+  taskManager:
+    resource:
+      memory: "4096m"
+      cpu: 2
+    replicas: 2
+  job:
+    jarURI: local:///opt/flink/usrlib/app.jar
+    entryClass: com.girisk.flink.risk.FootballOrderKafkaJob
+    parallelism: 4
+    upgradeMode: savepoint
+    state: running
+    args:
+      - "--bootstrap"
+      - "kafka.yfls.internal:9092"
+      - "--source.topic.pre"
+      - "girisk.trading.order.risk-check.v1"
+      - "--source.topic.post"
+      - "girisk.trading.order.risk-check.post.v1"
+      - "--group.id"
+      - "girisk-engine-prod"
+      - "--offset.pre"
+      - "latest"
+      - "--offset.post"
+      - "earliest"
+      - "--live.score.enabled"
+      - "true"
+      - "--live.score.topic"
+      - "football.live-score"
+      - "--grid"
+      - "6"
+      - "--limit.enabled"
+      - "true"
+      - "--limit.delta"
+      - "0.2"
+      - "--limit.initialSeedPayoutYuan"
+      - "2000"
+      - "--exposure.maxWorstLossYuan"
+      - "1000"
+      - "--sink.topic.detail"
+      - "football.order.detail"
+      - "--sink.topic.summary"
+      - "football.order.summary"
+      - "--sink.topic.limit"
+      - "football.order.limit"
+      - "--sink.topic.business"
+      - "football.order.business"
+      - "--sink.ensureTopic"
+      - "false"
+      - "--kafka.probe.enabled"
+      - "false"
+      - "--parallelism"
+      - "4"

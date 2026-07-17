@@ -1,0 +1,28 @@
+# 内网自签 CA。生产请替换为企业 PKI。
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: yfls-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: yfls-ca-root
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: yfls-internal-ca
+  secretName: yfls-ca-root
+  issuerRef:
+    name: yfls-bootstrap
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: yfls-ca
+spec:
+  ca:
+    secretName: yfls-ca-root

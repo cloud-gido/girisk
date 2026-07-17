@@ -1,0 +1,77 @@
+Flink Session 提交说明（与仓库根 pom.xml 一致）
+
+一、打包与依赖
+1. mvn clean package — shade 打入：本工程 + Jackson + kafka-clients + flink-connector-kafka/base（平台集群常未预装连接器）。
+2. 集群需：Flink 2.0.1（与 pom 一致）；connector 已打进 JAR，不依赖集群 lib 再装一份。
+   若 $FLINK_HOME/lib 存在 kafka-clients*.jar（残缺旧版），请移除或升级，否则 SCRAM 会与作业 JAR 内 kafka 冲突。
+   勿对 org.apache.kafka 做 shade relocate（JAAS ScramLoginModule 按类名加载，会混用父 ClassLoader）。
+3. 自检：jar tf target/flink-kafka-print-*.jar | grep KafkaMetricMutableWrapper 应有输出；jar tf ... | grep KafkaSource 应有输出。
+4. 若 HTTP 400 + NoClassDefFoundError KafkaSource：说明上传的是旧 JAR，请重新 mvn package 后上传。
+
+二、数据治理链路（供应商 raw → DWD，与 需求/kafka清洗需求.txt 对应）
+
+  [Mock 造数] RawEventKafkaGenFlinkJob
+       │  随机四种 JSON：Fixture / FootballMatchSummary / FootballMatchDetails / MarketSet
+       ▼
+  Kafka: raw.event
+       │
+       ├─► [可选调试] KafkaPrintJob（--topic raw.event --offset earliest）
+       │
+       ▼
+  [清洗路由] RawEventToDwdKafkaJob + cleanse/*
+       │  RawEventDwdTransformer.HANDLERS 按根字段匹配 → 统一 DWD 壳
+       ▼
+  Kafka（按事件类型拆分 topic，可用 --topic.* 覆盖）：
+    dev.third.genius.dwd.fixture.event
+    dev.third.genius.dwd.football.match.summary.event
+    dev.third.genius.dwd.football.match.details.event
+    dev.third.genius.dwd.marketset.event
+
+  造数入口：com.infras.flink.RawEventKafkaGenFlinkJob
+    --bootstrap <brokers> --topic raw.event --intervalMs 500 --count 0 --parallelism 1
+
+  清洗入口：com.infras.flink.RawEventToDwdKafkaJob
+    --bootstrap <brokers> --source.topic raw.event --group.id flink-raw-to-dwd --offset earliest
+
+  扩展新事件：DwdRoute 增枚举 → 实现 RawEventDwdHandler → 注册 HANDLERS → 补充 --topic.xxx 参数。
+
+三、足球订单 / 比分矩阵链路（与数据治理独立，topic 不同）
+
+  [手动写 Kafka] FootballOrderKafkaInteractiveProducer（逐行回车即发，类似 console-producer）
+       或 FootballOrderKafkaProducerJob（--file / --line 批量）
+       ▼
+  Kafka: football.order（默认）
+       ▼
+  [足球订单] FootballOrderKafkaJob（生产默认开启 checkpoint + RocksDB）
+    部署/打包/排障（主文档）：docs/football-order-kafka-deployment.md
+  参数明细：docs/football-order-kafka-job-config.md
+    Kafka --sink.topic.detail girisk.football.detail.result   订单×假设比分明细（每格一行）
+    Kafka --sink.topic.summary girisk.football.summary.result  场次汇总快照 schemaVersion=7（每场每次触发一条，含 assumedScores[]）
+    下游对接文档：docs/football-order-summary-kafka-schema.md（Summary v7 + Detail v3 + v6 迁移）
+    兼容别名 --sink.topic.risk 等同 detail；--sink.topic.matrix 等同 summary
+    --score 2:1 --grid 6 --eventTime.outOfOrderSec 10
+    --checkpoint.dir hdfs:///flink/checkpoints/football-order   （或集群 flink-conf 已配则可省略）
+    --checkpoint.intervalMs 60000 --state.backend rocksdb --state.backend.incremental true
+    --match.state.cleanupHoursAfterKickoff 3   开赛后 N 小时（事件时间）清空场次 ListState
+    --fixture.dim.file /path/fixture-dim.jsonl  可选：命中则补全联赛/主客/开赛，未命中留空仍输出
+
+  平台无法配参数/环境变量时（推荐）：
+    1. cp src/main/resources/kafka-client.properties.example src/main/resources/kafka-client.properties
+    2. 填写 bootstrap / sasl.username / sasl.password（该文件已 gitignore，勿提交）
+    3. mvn clean package 后上传 JAR；启动日志应出现 [KafkaClientConfigs] 配置文件: classpath:kafka-client.properties
+    或把 kafka-client.properties 放到集群 /opt/flink/conf/kafka-client.properties
+
+  测试 MSK 亦可用环境变量 + 程序参数（见 kafka-client.properties.example 注释）
+    兼容旧入口：FootballOrderMatrixKafkaJob / FootballOrderRiskKafkaJob 转发本类
+
+  本地解析一行：com.infras.flink.girisk.kafka.KafkaFootballOrderCsvParserCli
+
+四、样例 JSON
+  src/main/resources/fixture.raw.topic.json、FootballMatchSummary.raw.topic.json、matchdetail.json、marketset.json
+
+五、手动写订单 Kafka（开发环境完整步骤见 docs/football-order-kafka-job-config.md §6）
+  逐条交互（推荐）com.infras.flink.girisk.kafka.FootballOrderKafkaInteractiveProducer
+    IDE 运行 main；开发 Kafka 10.0.0.10:30992 需 --bootstrap + --kafka.security.protocol PLAINTEXT
+    （若 classpath 有 MSK 的 kafka-client.properties，须覆盖，见配置文档 §6.1）
+    回车发送，quit/exit 退出；默认 --ensureTopic true 自动建 topic
+  批量：com.infras.flink.girisk.kafka.FootballOrderKafkaProducerJob --file orders.txt

@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ci-deploy
+  namespace: flink
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deploy
+  namespace: flink
+rules:
+  - apiGroups: ["flink.apache.org"]
+    resources: ["flinkdeployments", "flinksessionjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deploy
+  namespace: flink
+subjects:
+  - kind: ServiceAccount
+    name: ci-deploy
+    namespace: flink
+roleRef:
+  kind: Role
+  name: ci-deploy
+  apiGroup: rbac.authorization.k8s.io
+---
+# GitLab CI 变量:
+#   KUBE_TOKEN = kubectl -n flink create token ci-deploy --duration=8760h
+#   KUBE_SERVER = https://k8s-api.yfls.internal:6443
+#   KUBE_CA_PEM = 集群 CA 证书内容

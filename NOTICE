@@ -1,0 +1,30 @@
+GiRisk
+Copyright 2024-2026 The GiRisk Authors
+
+This product includes software developed by the GiRisk / gido contributors.
+
+This distribution is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+---------------------------------------------------------------------------
+Trademarks
+
+"GiRisk", "GIRISK", and "gido" are product / brand names of their respective
+owners. This LICENSE does not grant trademark rights. Use of these names
+outside fair descriptive reference requires separate permission.
+
+---------------------------------------------------------------------------
+Affiliation
+
+This project is licensed under the Apache License, Version 2.0 and follows
+Apache-style governance conventions for convenience. It is NOT (unless
+separately announced) an Apache Software Foundation project, and is not
+endorsed by the ASF.
+
+---------------------------------------------------------------------------
+Third-party notices
+
+Runtime and build dependencies (Spring Boot, Apache Flink, Apache Kafka
+clients, Redis clients, React, Ant Design, etc.) are not bundled in the
+source tree. Their licenses apply when you obtain those artifacts via Maven
+or npm. See docs/COMPLIANCE.md for the dependency review process.

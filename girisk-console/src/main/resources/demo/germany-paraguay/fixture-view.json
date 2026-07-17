@@ -1,0 +1,17 @@
+{
+  "fixtureId" : "germany-paraguay",
+  "worstLossCents" : 1979237,
+  "hash" : {
+    "fixtureId" : "germany-paraguay",
+    "homeTeam" : "Germany",
+    "awayTeam" : "Paraguay",
+    "worstLossCents" : "1979237",
+    "worstScore" : "1:0",
+    "confirmedOrders" : "1964",
+    "pendingReserved" : "0",
+    "liveScore" : "0:0",
+    "updatedAt" : "1784264818168",
+    "replayStats" : "{\"acceptedCount\":1964,\"rejectedLimit\":767,\"rejectedExposure\":0,\"rejectedTotal\":767,\"totalOrders\":2731,\"acceptedStakeYuan\":129893.96,\"noRiskWorstPnlYuan\":-772040.29,\"noRiskWorstScore\":\"0:1\",\"withRiskWorstPnlYuan\":-19792.37,\"withRiskWorstScore\":\"1:0\",\"delta\":0.2,\"seedPayoutYuan\":5000.0,\"maxWorstLossYuan\":200000.0}",
+    "rawSnapshot" : "{\"acceptedCount\":1964,\"rejectedLimit\":767,\"rejectedExposure\":0,\"rejectedTotal\":767,\"totalOrders\":2731,\"acceptedStakeYuan\":129893.96,\"noRiskWorstPnlYuan\":-772040.29,\"noRiskWorstScore\":\"0:1\",\"withRiskWorstPnlYuan\":-19792.37,\"withRiskWorstScore\":\"1:0\",\"delta\":0.2,\"seedPayoutYuan\":5000.0,\"maxWorstLossYuan\":200000.0}"
+  }
+}

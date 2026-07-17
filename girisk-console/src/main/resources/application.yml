@@ -1,0 +1,80 @@
+server:
+  port: ${SERVER_PORT:18088}
+
+spring:
+  application:
+    name: girisk-console
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/girisk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:girisk}
+    password: ${SPRING_DATASOURCE_PASSWORD:girisk}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+      schema-locations: classpath:schema.sql
+      # data.sql is intentionally empty (clean pipeline). Use profile "demo" for samples.
+      data-locations: classpath:data.sql
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:girisk-console-stream}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    admin:
+      fail-fast: false
+    listener:
+      missing-topics-fatal: false
+
+girisk:
+  demo-data:
+    enabled: ${GIRISK_DEMO_DATA_ENABLED:false}
+  jwt:
+    secret: ${JWT_SECRET:girisk-jwt-secret-key-change-in-production-min-32-chars}
+    expiry-hours: 24
+  internal-api-key: ${INTERNAL_API_KEY:girisk-internal-api-key}
+  redis:
+    enabled: ${REDIS_ENABLED:true}
+    velocity-ttl-hours: 24
+  sports:
+    # false = Flink 为体育裁决权威；本仓 HTTP decide 仅跑用户规则（调试可开 true）
+    online-decide-enabled: ${SPORTS_ONLINE_DECIDE_ENABLED:false}
+    exposure-check-cron: ${SPORTS_EXPOSURE_CRON:0 */5 * * * *}
+    default-delta: ${SPORTS_DEFAULT_DELTA:0.2}
+    seed-payout-yuan: ${SPORTS_SEED_PAYOUT_YUAN:2000}
+    max-worst-loss-yuan: ${SPORTS_MAX_WORST_LOSS_YUAN:1000}
+    # 单注最大返彩（元）；0 = 关闭全局单注上限（场次覆盖仍可单独开启）
+    max-bet-payout-yuan: ${SPORTS_MAX_BET_PAYOUT_YUAN:0}
+    reserve-ttl-seconds: ${SPORTS_RESERVE_TTL_SECONDS:30}
+    limit-decision-enabled: ${SPORTS_LIMIT_DECISION_ENABLED:true}
+  tenant:
+    enforce: ${GIRISK_TENANT_ENFORCE:false}
+  review:
+    callback-url: ${GIRISK_REVIEW_CALLBACK_URL:}
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
+    order-topic: ${KAFKA_ORDER_TOPIC:girisk.order.event}
+    decision-topic: ${KAFKA_DECISION_TOPIC:girisk.decision.event}
+    flink-decision-topic: ${KAFKA_FLINK_DECISION_TOPIC:girisk.decision.v1}
+    config-topic: ${KAFKA_CONFIG_TOPIC:girisk.config.v1}
+    status-topic: ${KAFKA_STATUS_TOPIC:girisk.trading.order.risk-check.post.v1}
+    consumer-group: ${KAFKA_CONSUMER_GROUP:girisk-console-stream}
+    flink-decision-group: ${KAFKA_FLINK_DECISION_GROUP:girisk-console-flink-decision}
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+    topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+
+logging:
+  level:
+    com.girisk: INFO
+    org.apache.kafka: WARN

@@ -1,0 +1,25 @@
+target/
+**/target/
+logs/
+.girisk.pid
+.idea/
+*.iml
+.DS_Store
+girisk-console/frontend/node_modules/
+girisk-console/frontend/dist/
+girisk-engine/src/main/resources/kafka-client.properties
+# Never commit live MSK / cluster credentials — keep *.example only
+girisk-engine/src/main/resources/kafka-client.properties.dev
+girisk-engine/src/main/resources/kafka-client.properties.prod
+girisk-engine/src/main/resources/kafka-client.properties.local
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+**/secrets/
+credentials.json
+**/application-local-secret.yml
+deploy/flink/prod/*-secret.yaml
+!deploy/flink/prod/*-secret.yaml.example

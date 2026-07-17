@@ -1,0 +1,569 @@
+{
+  "Header": {
+    "MessageGuid": "b0aa9606-bb4a-49c3-a002-465fc5f11c4b",
+    "TimeStampUtc": "2026-05-12T09:43:45.4039876Z",
+    "Retry": 0
+  },
+  "MarketSet": {
+    "FixtureId": 12562649,
+    "Markets": [
+      {
+        "Id": 6181314,
+        "TradingStatus": "Open",
+        "Name": "Half-time Away Team Exact Number of Goals",
+        "ExpiryUtc": "2026-05-12T17:00:00Z",
+        "MarketType": {
+          "Id": 10592,
+          "Name": "Half-time Away Team Exact Number of Goals",
+          "IsHandicap": false
+        },
+        "InPlay": false,
+        "Selections": [
+          {
+            "Id": 17405697,
+            "TradingStatus": "Trading",
+            "Name": "0",
+            "Range": {
+              "High": 0.0,
+              "Low": 0.0
+            },
+            "Numerator": 9,
+            "Denominator": 20,
+            "Decimal": 1.45
+          },
+          {
+            "Id": 17405698,
+            "TradingStatus": "Trading",
+            "Name": "1",
+            "Range": {
+              "High": 1.0,
+              "Low": 1.0
+            },
+            "Numerator": 7,
+            "Denominator": 4,
+            "Decimal": 2.75
+          },
+          {
+            "Id": 17405699,
+            "TradingStatus": "Trading",
+            "Name": "2",
+            "Range": {
+              "High": 2.0,
+              "Low": 2.0
+            },
+            "Numerator": 7,
+            "Denominator": 1,
+            "Decimal": 8.0
+          },
+          {
+            "Id": 17405700,
+            "TradingStatus": "Trading",
+            "Name": "3",
+            "Range": {
+              "High": 3.0,
+              "Low": 3.0
+            },
+            "Numerator": 22,
+            "Denominator": 1,
+            "Decimal": 23.0
+          }
+        ],
+        "CashOutEnabled": false,
+        "HighAvailabilityCashOutEnabled": false
+      },
+      {
+        "Id": 6187602,
+        "TradingStatus": "Open",
+        "Name": "Player to Assist",
+        "ExpiryUtc": "2026-05-12T17:00:00Z",
+        "MarketType": {
+          "Id": 12104,
+          "Name": "Player to Assist",
+          "IsHandicap": false
+        },
+        "InPlay": false,
+        "Selections": [
+          {
+            "Id": 17427216,
+            "TradingStatus": "Trading",
+            "Name": "Aidoo, J",
+            "CompetitorId": 822057,
+            "Numerator": 27,
+            "Denominator": 4,
+            "Decimal": 7.75
+          },
+          {
+            "Id": 17427217,
+            "TradingStatus": "Trading",
+            "Name": "Alonso, Marcos",
+            "CompetitorId": 522197,
+            "Numerator": 31,
+            "Denominator": 4,
+            "Decimal": 8.75
+          },
+          {
+            "Id": 17427218,
+            "TradingStatus": "Trading",
+            "Name": "Carreira, Sergio",
+            "CompetitorId": 1148098,
+            "Numerator": 6,
+            "Denominator": 1,
+            "Decimal": 7.0
+          },
+          {
+            "Id": 17427219,
+            "TradingStatus": "Trading",
+            "Name": "Moriba, Ilaix",
+            "CompetitorId": 1257588,
+            "Numerator": 5,
+            "Denominator": 1,
+            "Decimal": 6.0
+          },
+          {
+            "Id": 17427220,
+            "TradingStatus": "Suspended",
+            "Name": "Nunez, Alvaro",
+            "CompetitorId": 1419235,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17427221,
+            "TradingStatus": "Trading",
+            "Name": "Olasagasti, Jon Ander",
+            "CompetitorId": 1273697,
+            "Numerator": 8,
+            "Denominator": 1,
+            "Decimal": 9.0
+          },
+          {
+            "Id": 17427222,
+            "TradingStatus": "Suspended",
+            "Name": "Ristic, M",
+            "CompetitorId": 928420,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17427223,
+            "TradingStatus": "Trading",
+            "Name": "Sotelo, Hugo",
+            "CompetitorId": 1314110,
+            "Numerator": 21,
+            "Denominator": 4,
+            "Decimal": 6.25
+          },
+          {
+            "Id": 17427224,
+            "TradingStatus": "Trading",
+            "Name": "Swedberg, Williot",
+            "CompetitorId": 1289791,
+            "Numerator": 18,
+            "Denominator": 5,
+            "Decimal": 4.6
+          },
+          {
+            "Id": 17427225,
+            "TradingStatus": "Trading",
+            "Name": "Vecino, Matías",
+            "CompetitorId": 756390,
+            "Numerator": 5,
+            "Denominator": 1,
+            "Decimal": 6.0
+          },
+          {
+            "Id": 17427226,
+            "TradingStatus": "Trading",
+            "Name": "Vencedor, Unai",
+            "CompetitorId": 1164588,
+            "Numerator": 33,
+            "Denominator": 4,
+            "Decimal": 9.25
+          },
+          {
+            "Id": 17427239,
+            "TradingStatus": "Trading",
+            "Name": "Martinez, Pablo",
+            "CompetitorId": 1153462,
+            "Numerator": 23,
+            "Denominator": 4,
+            "Decimal": 6.75
+          },
+          {
+            "Id": 17427242,
+            "TradingStatus": "Trading",
+            "Name": "Alvarez, Hugo",
+            "CompetitorId": 1440349,
+            "Numerator": 19,
+            "Denominator": 4,
+            "Decimal": 5.75
+          },
+          {
+            "Id": 17427243,
+            "TradingStatus": "Suspended",
+            "Name": "Eyong, Etta",
+            "CompetitorId": 1360844,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17427244,
+            "TradingStatus": "Trading",
+            "Name": "Mingueza Garcia, Oscar",
+            "CompetitorId": 1066016,
+            "Numerator": 18,
+            "Denominator": 5,
+            "Decimal": 4.6
+          },
+          {
+            "Id": 17427276,
+            "TradingStatus": "Trading",
+            "Name": "Alvarez Rivera, C",
+            "CompetitorId": 1250446,
+            "Numerator": 17,
+            "Denominator": 4,
+            "Decimal": 5.25
+          },
+          {
+            "Id": 17427277,
+            "TradingStatus": "Trading",
+            "Name": "Brugue Ayguade, R",
+            "CompetitorId": 1295849,
+            "Numerator": 6,
+            "Denominator": 1,
+            "Decimal": 7.0
+          },
+          {
+            "Id": 17427278,
+            "TradingStatus": "Suspended",
+            "Name": "Espi, C",
+            "CompetitorId": 1453125,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17427279,
+            "TradingStatus": "Trading",
+            "Name": "Losada, Iker",
+            "CompetitorId": 1136757,
+            "Numerator": 13,
+            "Denominator": 2,
+            "Decimal": 7.5
+          },
+          {
+            "Id": 17427280,
+            "TradingStatus": "Trading",
+            "Name": "Morales, JL",
+            "CompetitorId": 795076,
+            "Numerator": 25,
+            "Denominator": 4,
+            "Decimal": 7.25
+          },
+          {
+            "Id": 17427281,
+            "TradingStatus": "Suspended",
+            "Name": "Romero, Ivan",
+            "CompetitorId": 1251688,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17444678,
+            "TradingStatus": "Trading",
+            "Name": "Abed, Tai",
+            "CompetitorId": 1400819,
+            "Numerator": 5,
+            "Denominator": 1,
+            "Decimal": 6.0
+          },
+          {
+            "Id": 17444679,
+            "TradingStatus": "Trading",
+            "Name": "Aspas, Iago",
+            "CompetitorId": 518356,
+            "Numerator": 29,
+            "Denominator": 10,
+            "Decimal": 3.9
+          },
+          {
+            "Id": 17444680,
+            "TradingStatus": "Trading",
+            "Name": "Duran, P",
+            "CompetitorId": 1368648,
+            "Numerator": 15,
+            "Denominator": 4,
+            "Decimal": 4.75
+          },
+          {
+            "Id": 17444681,
+            "TradingStatus": "Suspended",
+            "Name": "Jutglà, Ferran",
+            "CompetitorId": 1322354,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17444682,
+            "TradingStatus": "Trading",
+            "Name": "Lopez, Fernando",
+            "CompetitorId": 1556673,
+            "Numerator": 3,
+            "Denominator": 1,
+            "Decimal": 4.0
+          },
+          {
+            "Id": 17444683,
+            "TradingStatus": "Trading",
+            "Name": "Rueda, Javi",
+            "CompetitorId": 1470829,
+            "Numerator": 29,
+            "Denominator": 10,
+            "Decimal": 3.9
+          },
+          {
+            "Id": 17455529,
+            "TradingStatus": "Suspended",
+            "Name": "Garcia, Victor",
+            "CompetitorId": 1214925,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17456397,
+            "TradingStatus": "Trading",
+            "Name": "Antanon, Andres",
+            "CompetitorId": 1722671,
+            "Numerator": 39,
+            "Denominator": 10,
+            "Decimal": 4.9
+          },
+          {
+            "Id": 17456398,
+            "TradingStatus": "Trading",
+            "Name": "Arriaga, K",
+            "CompetitorId": 1271668,
+            "Numerator": 19,
+            "Denominator": 2,
+            "Decimal": 10.5
+          },
+          {
+            "Id": 17456399,
+            "TradingStatus": "Suspended",
+            "Name": "Cervera, Dani",
+            "CompetitorId": 1734385,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17456400,
+            "TradingStatus": "Suspended",
+            "Name": "Cervi, Franco",
+            "CompetitorId": 932435,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17456401,
+            "TradingStatus": "Trading",
+            "Name": "Cortes, Francisco",
+            "CompetitorId": 1472570,
+            "Numerator": 8,
+            "Denominator": 1,
+            "Decimal": 9.0
+          },
+          {
+            "Id": 17456402,
+            "TradingStatus": "Trading",
+            "Name": "De La Fuente, A",
+            "CompetitorId": 1066471,
+            "Numerator": 9,
+            "Denominator": 1,
+            "Decimal": 10.0
+          },
+          {
+            "Id": 17456403,
+            "TradingStatus": "Trading",
+            "Name": "Domínguez, Carlos",
+            "CompetitorId": 1278113,
+            "Numerator": 21,
+            "Denominator": 2,
+            "Decimal": 11.5
+          },
+          {
+            "Id": 17456404,
+            "TradingStatus": "Trading",
+            "Name": "El-Abdellaoui, J",
+            "CompetitorId": 1338955,
+            "Numerator": 18,
+            "Denominator": 5,
+            "Decimal": 4.6
+          },
+          {
+            "Id": 17456405,
+            "TradingStatus": "Trading",
+            "Name": "Elgezabal, U",
+            "CompetitorId": 923594,
+            "Numerator": 16,
+            "Denominator": 1,
+            "Decimal": 17.0
+          },
+          {
+            "Id": 17456406,
+            "TradingStatus": "Trading",
+            "Name": "García, Hugo Burcio",
+            "CompetitorId": 1719332,
+            "Numerator": 23,
+            "Denominator": 4,
+            "Decimal": 6.75
+          },
+          {
+            "Id": 17456407,
+            "TradingStatus": "Suspended",
+            "Name": "Gonzalez Sotos, H",
+            "CompetitorId": 1314715,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17456408,
+            "TradingStatus": "Suspended",
+            "Name": "Krug, M",
+            "CompetitorId": 1473032,
+            "Numerator": 0,
+            "Denominator": 1,
+            "Decimal": 1.0
+          },
+          {
+            "Id": 17456409,
+            "TradingStatus": "Trading",
+            "Name": "Lago, Y",
+            "CompetitorId": 1470827,
+            "Numerator": 29,
+            "Denominator": 4,
+            "Decimal": 8.25
+          },
+          {
+            "Id": 17456410,
+            "TradingStatus": "Trading",
+            "Name": "Moreno, Matías Agustín",
+            "CompetitorId": 1414827,
+            "Numerator": 15,
+            "Denominator": 1,
+            "Decimal": 16.0
+          },
+          {
+            "Id": 17456411,
+            "TradingStatus": "Trading",
+            "Name": "Pampín, D",
+            "CompetitorId": 1020828,
+            "Numerator": 9,
+            "Denominator": 1,
+            "Decimal": 10.0
+          },
+          {
+            "Id": 17456412,
+            "TradingStatus": "Trading",
+            "Name": "Pérez Gómez, Nacho",
+            "CompetitorId": 1642566,
+            "Numerator": 8,
+            "Denominator": 1,
+            "Decimal": 9.0
+          },
+          {
+            "Id": 17456413,
+            "TradingStatus": "Trading",
+            "Name": "Raghouber, Ugo",
+            "CompetitorId": 1325448,
+            "Numerator": 29,
+            "Denominator": 4,
+            "Decimal": 8.25
+          },
+          {
+            "Id": 17456414,
+            "TradingStatus": "Trading",
+            "Name": "Rey, O",
+            "CompetitorId": 1037901,
+            "Numerator": 31,
+            "Denominator": 4,
+            "Decimal": 8.75
+          },
+          {
+            "Id": 17456415,
+            "TradingStatus": "Trading",
+            "Name": "Roman, Miguel",
+            "CompetitorId": 1379361,
+            "Numerator": 39,
+            "Denominator": 10,
+            "Decimal": 4.9
+          },
+          {
+            "Id": 17456416,
+            "TradingStatus": "Trading",
+            "Name": "Sánchez, Manuel",
+            "CompetitorId": 1119404,
+            "Numerator": 27,
+            "Denominator": 4,
+            "Decimal": 7.75
+          },
+          {
+            "Id": 17456417,
+            "TradingStatus": "Trading",
+            "Name": "Starfelt, Carl",
+            "CompetitorId": 764079,
+            "Numerator": 12,
+            "Denominator": 1,
+            "Decimal": 13.0
+          },
+          {
+            "Id": 17456418,
+            "TradingStatus": "Trading",
+            "Name": "Toljan, Jeremy",
+            "CompetitorId": 740224,
+            "Numerator": 31,
+            "Denominator": 4,
+            "Decimal": 8.75
+          },
+          {
+            "Id": 17456419,
+            "TradingStatus": "Trading",
+            "Name": "Tunde, Kareem",
+            "CompetitorId": 1712982,
+            "Numerator": 6,
+            "Denominator": 1,
+            "Decimal": 7.0
+          },
+          {
+            "Id": 17858823,
+            "TradingStatus": "Trading",
+            "Name": "Matturro, Alan",
+            "CompetitorId": 1346955,
+            "Numerator": 20,
+            "Denominator": 1,
+            "Decimal": 21.0
+          },
+          {
+            "Id": 17858824,
+            "TradingStatus": "Trading",
+            "Name": "Rodriguez, Javi",
+            "CompetitorId": 1515661,
+            "Numerator": 21,
+            "Denominator": 4,
+            "Decimal": 6.25
+          }
+        ],
+        "CashOutEnabled": false,
+        "HighAvailabilityCashOutEnabled": false
+      }
+    ]
+  }
+}

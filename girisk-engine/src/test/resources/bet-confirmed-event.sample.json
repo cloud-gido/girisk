@@ -1,0 +1,40 @@
+{
+  "envelopeVersion": "1",
+  "operatorId": 1,
+  "orderId": "318720381861392385",
+  "sourceType": "TRADING",
+  "eventId": "bdfa0e9d-db9a-48df-a862-b81eb24ae2c5",
+  "eventType": "BetConfirmedEvent",
+  "aggregateType": "BET",
+  "aggregateId": "318720381861392385",
+  "sourceSequence": 1,
+  "eventVersion": 1,
+  "correlationId": "Ably BetAllowed",
+  "payload": {
+    "orderId": "318720381861392385",
+    "betId": "318720381861392384",
+    "betType": "SINGLE",
+    "status": "CONFIRMED",
+    "stake": 1.0,
+    "currency": "BRL",
+    "playerId": "NQTEST13146949BRL",
+    "isLive": true,
+    "betTime": "2026-05-29T12:01:00.574528Z",
+    "legs": [
+      {
+        "legId": "318720381894946816",
+        "fixtureId": "999886001",
+        "marketId": 6757964,
+        "selectionId": "19196201",
+        "legPick": {
+          "type": "1X2",
+          "line": 0.0,
+          "side": "HOME"
+        },
+        "period": "FT",
+        "price": 24.0,
+        "pricingModelVersion": "v1"
+      }
+    ]
+  }
+}
