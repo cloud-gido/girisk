@@ -32,7 +32,7 @@ Optional later: Corporate CLA / ICLA if a foundation or company requires it.
 
 Before each release:
 
-1. `mvn -pl girisk-console,girisk-engine -am dependency:list` — flag GPL/AGPL
+1. `mvn -pl girisk-console,girisk-engine -am dependency:list` — flag GPL/AGPL（公开同步前确认 Engine 未进 GitHub）
    or unknown licenses if you redistribute binaries.
 2. `cd girisk-console/frontend && npm ls` — same for npm.
 3. Prefer Apache-2.0 / MIT / BSD. Avoid bundling GPL into releases without legal review.

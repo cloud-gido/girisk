@@ -32,12 +32,15 @@ export function buildOutcomeRows(
   selections: string[],
   stakes: Record<string, number>,
   delta: number,
+  seedPayoutYuan = 0,
 ): OutcomeLimitRow[] {
-  const amounts = selections.map((sel) => stakes[sel] ?? 0);
-  const results = calcAll(amounts, delta);
+  const actual = selections.map((sel) => stakes[sel] ?? 0);
+  const withSeed = actual.map((v) => v + (seedPayoutYuan || 0));
+  const results = calcAll(withSeed, delta);
   return selections.map((selection, i) => ({
     selection,
-    stake: amounts[i],
+    // 已投注展示实际占用（不含冷启动种子）
+    stake: actual[i],
     targetAmount: results[i].targetAmount,
     maxAllowedAmount: results[i].maxAllowed,
     acceptMax: results[i].bMax,

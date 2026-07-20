@@ -72,10 +72,24 @@ public final class BetConfirmedEventJsonParser {
             o.orderId = orderId;
             o.orderTime = text(payload, "betTime");
             o.userId = firstNonEmpty(text(payload, "playerId"), text(payload, "userId"));
-            o.league = "";
-            o.homeTeam = "";
-            o.awayTeam = "";
-            o.kickoffTime = "";
+            o.sportCode =
+                    firstNonEmpty(
+                            text(payload, "sportCode"),
+                            text(payload, "sport"),
+                            text(leg, "sportCode"),
+                            text(leg, "sport"),
+                            "football");
+            o.league =
+                    firstNonEmpty(
+                            text(payload, "leagueCode"),
+                            text(payload, "league"),
+                            text(leg, "leagueCode"),
+                            text(leg, "league"),
+                            text(leg, "competition"),
+                            "");
+            o.homeTeam = firstNonEmpty(text(leg, "homeTeam"), text(leg, "home"), "");
+            o.awayTeam = firstNonEmpty(text(leg, "awayTeam"), text(leg, "away"), "");
+            o.kickoffTime = firstNonEmpty(text(leg, "kickoffTime"), text(leg, "kickoff"), "");
             o.parlayType = mapBetType(text(payload, "betType"));
             o.playType = pick.marketType;
             o.handicapText = formatHandicap(pick.marketType, pick.side, pick.line);
@@ -323,8 +337,16 @@ public final class BetConfirmedEventJsonParser {
         return String.valueOf(v);
     }
 
-    private static String firstNonEmpty(String a, String b) {
-        return !a.isEmpty() ? a : b;
+    private static String firstNonEmpty(String... values) {
+        if (values == null) {
+            return "";
+        }
+        for (String v : values) {
+            if (v != null && !v.isEmpty()) {
+                return v;
+            }
+        }
+        return "";
     }
 
     private static JsonNode require(JsonNode parent, String field) {

@@ -1,5 +1,8 @@
 package com.girisk.sports.service;
 
+import com.girisk.configcenter.model.RiskFixtureView;
+import com.girisk.flink.RedisFixtureViewReader;
+import com.girisk.sports.dto.OutcomeLimitRow;
 import com.girisk.sports.dto.SportsDashboardSummary;
 import com.girisk.sports.dto.SportsMatchView;
 import com.girisk.sports.exposure.GroupLimitSnapshot;
@@ -14,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -26,14 +31,17 @@ public class SportsExposureService {
     private final SportsMatchRepository matchRepository;
     private final ExposureStore exposureStore;
     private final FixtureLimitParamsService limitParamsService;
+    private final RedisFixtureViewReader fixtureViewReader;
 
     public SportsExposureService(
             SportsMatchRepository matchRepository,
             ExposureStore exposureStore,
-            FixtureLimitParamsService limitParamsService) {
+            FixtureLimitParamsService limitParamsService,
+            RedisFixtureViewReader fixtureViewReader) {
         this.matchRepository = matchRepository;
         this.exposureStore = exposureStore;
         this.limitParamsService = limitParamsService;
+        this.fixtureViewReader = fixtureViewReader;
     }
 
     public List<SportsMatch> listMatches() {
@@ -101,15 +109,32 @@ public class SportsExposureService {
     }
 
     public GroupLimitSnapshot calcGroupLimitSnapshot(MarketGroupKey key, double delta) {
+        return calcGroupLimitSnapshot(key, delta, BigDecimal.ZERO);
+    }
+
+    /**
+     * Console HTTP decide / 演示用：按 ExposureStore 计算限额。
+     * 责任盘生产视图请用 {@link #toView}（Flink Redis marketGroups）。
+     */
+    public GroupLimitSnapshot calcGroupLimitSnapshot(
+            MarketGroupKey key, double delta, BigDecimal seedPayoutYuan) {
+        Map<String, BigDecimal> payouts = exposureStore.getGroupPayouts(key);
         Map<String, BigDecimal> stakes = exposureStore.getGroupStakes(key);
         String[] selections = key.marketType().selections();
-        List<BigDecimal> amounts = new ArrayList<>();
+        BigDecimal seed = seedPayoutYuan == null ? BigDecimal.ZERO : seedPayoutYuan;
+        List<BigDecimal> actual = new ArrayList<>();
+        List<BigDecimal> withSeed = new ArrayList<>();
         for (String sel : selections) {
-            amounts.add(stakes.getOrDefault(sel, BigDecimal.ZERO));
+            BigDecimal p = payouts.getOrDefault(sel, null);
+            if (p == null) {
+                p = stakes.getOrDefault(sel, BigDecimal.ZERO);
+            }
+            actual.add(p);
+            withSeed.add(p.add(seed));
         }
         List<ProportionalLimitCalculator.LimitResult> results =
-                ProportionalLimitCalculator.calcAll(amounts, delta);
-        return GroupLimitSnapshot.from(selections, amounts, results);
+                ProportionalLimitCalculator.calcAll(withSeed, delta);
+        return GroupLimitSnapshot.from(selections, actual, results);
     }
 
     public Map<String, BigDecimal> calcGroupLimits(MarketGroupKey key, double delta) {
@@ -118,29 +143,123 @@ public class SportsExposureService {
 
     public SportsMatchView toView(SportsMatch match) {
         FixtureLimitParamsService.EffectiveParams params = limitParamsService.resolve(match);
-        double delta = params.delta().doubleValue();
+        RiskFixtureView flinkView = fixtureViewReader.findByFixtureId(match.matchCode());
 
-        List<SportsMatchView.MarketGroupView> groups = new ArrayList<>();
-        groups.add(buildGroupView(match.matchCode(), SportsMarketType.ONE_X_TWO, "", delta));
-        groups.add(buildGroupView(match.matchCode(), SportsMarketType.OVER_UNDER, "3", delta));
-        groups.add(buildGroupView(match.matchCode(), SportsMarketType.HANDICAP, "1", delta));
+        BigDecimal deltaBd = params.delta();
+        BigDecimal seed = params.seedPayoutYuan() == null ? BigDecimal.ZERO : params.seedPayoutYuan();
+        if (flinkView != null) {
+            if (flinkView.limitDelta() != null) {
+                deltaBd = BigDecimal.valueOf(flinkView.limitDelta());
+            } else if (flinkView.replayStats() != null && flinkView.replayStats().get("delta") != null) {
+                deltaBd = toBd(flinkView.replayStats().get("delta"));
+            }
+            if (flinkView.initialSeedPayoutYuan() != null) {
+                seed = BigDecimal.valueOf(flinkView.initialSeedPayoutYuan());
+            } else if (flinkView.replayStats() != null
+                    && flinkView.replayStats().get("seedPayoutYuan") != null) {
+                seed = toBd(flinkView.replayStats().get("seedPayoutYuan"));
+            }
+        }
 
-        BigDecimal exposure = exposureStore.getMatchTotalStake(match.matchCode());
+        List<SportsMatchView.MarketGroupView> groups = mapFlinkMarketGroups(
+                flinkView == null ? null : flinkView.marketGroups());
+
+        BigDecimal exposure = sumGroupStakes(groups);
+        if (exposure.compareTo(BigDecimal.ZERO) == 0 && flinkView != null
+                && flinkView.replayStats() != null
+                && flinkView.replayStats().get("acceptedStakeYuan") != null) {
+            exposure = toBd(flinkView.replayStats().get("acceptedStakeYuan"));
+        }
+
         return new SportsMatchView(
                 match.id(), match.matchCode(), match.homeTeam(), match.awayTeam(),
                 match.sportOrDefault(), match.leagueCodeOrDefault(), match.leagueNameOrDefault(),
-                params.maxWorstLossYuan(), match.limitMode(), exposure, params.delta(),
-                params.seedPayoutYuan(), params.maxWorstLossYuan(), params.maxBetPayoutYuan(),
+                params.maxWorstLossYuan(), match.limitMode(), exposure, deltaBd,
+                seed, params.maxWorstLossYuan(), params.maxBetPayoutYuan(),
                 params.overrideActive(),
                 match.status(), match.lastCheckAt(), groups);
     }
 
-    private SportsMatchView.MarketGroupView buildGroupView(
-            String matchCode, SportsMarketType type, String line, double delta) {
-        MarketGroupKey key = MarketGroupKey.of(matchCode, type, line);
-        GroupLimitSnapshot snapshot = calcGroupLimitSnapshot(key, delta);
-        return new SportsMatchView.MarketGroupView(
-                type.name(), type.label(), line,
-                snapshot.stakes(), snapshot.acceptMax(), snapshot.rows());
+    /**
+     * 责任盘只认 Flink Redis {@code marketGroups}；无数据时返回空列表（不回退 ExposureStore）。
+     */
+    @SuppressWarnings("unchecked")
+    static List<SportsMatchView.MarketGroupView> mapFlinkMarketGroups(List<Map<String, Object>> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<SportsMatchView.MarketGroupView> out = new ArrayList<>();
+        for (Map<String, Object> g : raw) {
+            if (g == null) {
+                continue;
+            }
+            String marketType = str(g.get("marketType"));
+            String marketLabel = str(g.get("marketLabel"));
+            if (marketLabel.isBlank()) {
+                marketLabel = marketType;
+            }
+            String line = str(g.get("line"));
+            Object outcomesObj = g.get("outcomes");
+            if (!(outcomesObj instanceof List<?> outcomesList)) {
+                continue;
+            }
+            Map<String, BigDecimal> stakes = new LinkedHashMap<>();
+            Map<String, BigDecimal> limits = new LinkedHashMap<>();
+            List<OutcomeLimitRow> rows = new ArrayList<>();
+            for (Object o : outcomesList) {
+                if (!(o instanceof Map<?, ?> om)) {
+                    continue;
+                }
+                Map<String, Object> row = (Map<String, Object>) om;
+                String selection = str(row.get("selection"));
+                if (selection.isBlank()) {
+                    continue;
+                }
+                BigDecimal stake = toBd(row.get("stake"));
+                BigDecimal target = toBd(row.get("targetAmount"));
+                BigDecimal maxAllowed = toBd(row.get("maxAllowedAmount"));
+                BigDecimal acceptMax = toBd(row.get("acceptMax"));
+                stakes.put(selection, stake);
+                limits.put(selection, acceptMax);
+                rows.add(new OutcomeLimitRow(selection, stake, target, maxAllowed, acceptMax));
+            }
+            if (rows.isEmpty()) {
+                continue;
+            }
+            out.add(new SportsMatchView.MarketGroupView(
+                    marketType, marketLabel, line, stakes, limits, rows));
+        }
+        return out;
+    }
+
+    private static BigDecimal sumGroupStakes(List<SportsMatchView.MarketGroupView> groups) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (SportsMatchView.MarketGroupView g : groups) {
+            for (BigDecimal v : g.stakes().values()) {
+                sum = sum.add(v == null ? BigDecimal.ZERO : v);
+            }
+        }
+        return sum;
+    }
+
+    private static String str(Object o) {
+        return o == null ? "" : o.toString().trim();
+    }
+
+    private static BigDecimal toBd(Object o) {
+        if (o == null) {
+            return BigDecimal.ZERO;
+        }
+        if (o instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (o instanceof Number n) {
+            return BigDecimal.valueOf(n.doubleValue()).setScale(2, RoundingMode.HALF_UP);
+        }
+        try {
+            return new BigDecimal(o.toString()).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 }

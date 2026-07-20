@@ -100,6 +100,35 @@ class MatchTriggerAcceptanceTest {
     }
 
     @Test
+    void gate0MaxBetRejected_beforeProportional() {
+        // 种子很大 → Gate1 不会拒；maxBet=100、本单返彩 185 → Gate0 拒
+        FootballSportsOrder trigger =
+                KafkaFootballOrderCsvParser.parse(
+                        "13883500,O40,2026-05-18 10:12:00,U2,英超,曼城,利物浦,2026-05-16 22:00:00,胜平负,单关,无,主胜,1.85,100");
+        EnrichedFootballOrder enriched = new EnrichedFootballOrder(trigger, 1L, "k");
+
+        MatchTriggerAcceptance acceptance =
+                MatchTriggerAcceptance.evaluate(
+                        List.of(),
+                        enriched,
+                        false,
+                        GRID.grid,
+                        0.2,
+                        100000.0,
+                        ExposureLimitGate.WORST_LOSS_DISABLED,
+                        100.0,
+                        true,
+                        true,
+                        true,
+                        false);
+
+        assertTrue(acceptance.maxBetRejected);
+        assertTrue(acceptance.limitRejected);
+        assertFalse(acceptance.exposureRejected);
+        assertEquals(MatchTriggerAcceptance.RejectReason.LIMIT, acceptance.rejectReason);
+    }
+
+    @Test
     void coldStartSeed_firstOrderCapacityMatchesClosedForm() {
         // 种子 2000、胜平负三向：首单容量 = (0.4×6000−2000)/0.6 = 666.67（>= 拒）
         FootballSportsOrder accept = order("O30", 666, 1.0);

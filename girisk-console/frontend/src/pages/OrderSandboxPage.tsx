@@ -88,7 +88,7 @@ export default function OrderSandboxPage() {
         setStreamHint(`本地流处理完成 · ${res.decision} · 订单 ${res.orderId} · ${res.reason}`);
         message.success('已注入流管线并完成评估');
       } else if (isKafkaAck(res)) {
-        setStreamHint(`已发往 Kafka · ${res.orderId} · 可在流量监控看实时推送`);
+        setStreamHint(`已发往 Kafka · ${res.orderId} · 可在管线观察看实时推送`);
         message.success('已发送到 Kafka');
       } else {
         setStreamHint('已发送');
@@ -107,7 +107,7 @@ export default function OrderSandboxPage() {
     try {
       const count = Number(streamForm.getFieldValue('burstCount') || 10);
       const res = await riskApi.mockBurst(count);
-      setStreamHint(`Burst 完成 · 发送 ${res.sent} 笔 · via ${res.via} · 打开流量监控查看 SSE`);
+      setStreamHint(`Burst 完成 · 发送 ${res.sent} 笔 · via ${res.via} · 打开管线观察查看 SSE`);
       message.success(`已发送 ${res.sent} 笔 (${res.via})`);
     } catch (e) {
       message.error((e as Error).message);
@@ -120,7 +120,7 @@ export default function OrderSandboxPage() {
     <>
       <div className="page-header">
         <h2>调试沙箱</h2>
-        <p>验证规则与限额；发单压测在此完成，流量监控只负责观察管线状态</p>
+        <p>验证规则与限额；发单压测在此完成，管线观察只看联调流量</p>
       </div>
       <SandboxTabs />
 
@@ -204,7 +204,7 @@ export default function OrderSandboxPage() {
           <>
             <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
               走 mock-order / mock-burst：频次 enrichment → 规则引擎 → SSE。不改体育敞口。
-              {' '}<Link to="/girisk/stream">打开流量监控</Link>
+              {' '}<Link to="/girisk/stream">打开管线观察</Link>
             </Typography.Paragraph>
             <Form form={streamForm} layout="vertical" initialValues={{ burstCount: 10 }}>
               <Row gutter={16}>

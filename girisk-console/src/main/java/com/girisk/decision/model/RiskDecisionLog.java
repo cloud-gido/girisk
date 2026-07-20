@@ -31,6 +31,7 @@ public record RiskDecisionLog(
         String reasonsJson,
         String versionsJson,
         String featureSnapshotJson,
+        String evidenceJson,
         LocalDateTime createdAt
 ) {
     /** 兼容旧调用方的精简构造。 */
@@ -42,6 +43,6 @@ public record RiskDecisionLog(
         return new RiskDecisionLog(
                 id, requestId, orderId, userId, scenario, strategyCode, decision, riskScore,
                 riskLevel, hitRules, reason, amount, ip, deviceId, latencyMs, source,
-                null, null, null, null, null, null, null, null, null, null, null, createdAt);
+                null, null, null, null, null, null, null, null, null, null, null, null, createdAt);
     }
 }

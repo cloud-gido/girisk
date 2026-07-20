@@ -29,4 +29,16 @@ public record ScopeLimitOverride(
         String l = leagueCode == null || leagueCode.isBlank() ? "UNKNOWN" : leagueCode;
         return s + ":" + l;
     }
+
+    /** @return [sportCode, leagueCode] */
+    public static String[] splitLeagueKey(String scopeKey) {
+        if (scopeKey == null || scopeKey.isBlank()) {
+            return new String[]{"football", "UNKNOWN"};
+        }
+        int i = scopeKey.indexOf(':');
+        if (i <= 0 || i >= scopeKey.length() - 1) {
+            return new String[]{"football", scopeKey.trim()};
+        }
+        return new String[]{scopeKey.substring(0, i).trim(), scopeKey.substring(i + 1).trim()};
+    }
 }

@@ -65,6 +65,7 @@ public final class LocalExposureReplayMain {
         List<FootballSportsOrder> accepted = new ArrayList<>();
         int limitReject = 0;
         int exposureReject = 0;
+        int duplicateCount = 0;
         double acceptedStakeYuan = 0;
         for (FootballSportsOrder order : orders) {
             EnrichedFootballOrder trigger =
@@ -73,7 +74,9 @@ public final class LocalExposureReplayMain {
                     MatchTriggerAcceptance.evaluate(
                             accepted, trigger, false, grid.grid, delta, seed, maxWorst, true);
             double stakeExact = order.stakeCents() / 100.0;
-            if (decision.rejectReason == MatchTriggerAcceptance.RejectReason.NONE) {
+            if (decision.duplicateIgnored) {
+                duplicateCount++;
+            } else if (decision.rejectReason == MatchTriggerAcceptance.RejectReason.NONE) {
                 accepted.add(order);
                 acceptedStakeYuan += stakeExact;
             } else if (decision.rejectReason == MatchTriggerAcceptance.RejectReason.LIMIT) {
@@ -90,6 +93,7 @@ public final class LocalExposureReplayMain {
         stats.put("rejectedLimit", limitReject);
         stats.put("rejectedExposure", exposureReject);
         stats.put("rejectedTotal", limitReject + exposureReject);
+        stats.put("duplicateCount", duplicateCount);
         stats.put("totalOrders", orders.size());
         stats.put("acceptedStakeYuan", round2(acceptedStakeYuan));
         stats.put("noRiskWorstPnlYuan", round2(noRiskWorst.bookmakerPnlCents / 100.0));

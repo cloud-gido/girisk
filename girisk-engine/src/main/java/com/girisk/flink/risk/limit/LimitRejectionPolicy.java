@@ -17,6 +17,19 @@ public final class LimitRejectionPolicy {
 
     private LimitRejectionPolicy() {}
 
+    /**
+     * Gate0：单注返彩绝对上限。{@code maxBetPayoutYuan <= 0} 表示未启用。
+     * 与 Console 对齐：本单返彩 {@code >} 上限则拒。
+     */
+    public static boolean shouldRejectMaxBet(FootballSportsOrder triggerOrder, double maxBetPayoutYuan) {
+        if (maxBetPayoutYuan <= 0 || triggerOrder == null) {
+            return false;
+        }
+        return MarketStakeAggregator.payoutYuan(triggerOrder)
+                        .compareTo(BigDecimal.valueOf(maxBetPayoutYuan))
+                > 0;
+    }
+
     public static boolean shouldReject(
             FootballSportsOrder triggerOrder,
             List<FootballSportsOrder> priorOrders,

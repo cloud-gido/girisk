@@ -1,15 +1,23 @@
 package com.girisk.sports.store;
 
 import com.girisk.sports.model.FixtureLimitOverride;
+import com.girisk.sports.model.LimitScopeType;
+import com.girisk.sports.outbox.ScopeRiskConfigOutbox;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 @ConditionalOnProperty(name = "girisk.redis.enabled", havingValue = "true")
@@ -18,9 +26,12 @@ public class RedisFixtureLimitOverrideStore implements FixtureLimitOverrideStore
     private static final String KEY_PREFIX = "girisk:override:fixture:";
 
     private final StringRedisTemplate redis;
+    private final ScopeRiskConfigOutbox outbox;
 
-    public RedisFixtureLimitOverrideStore(StringRedisTemplate redis) {
+    public RedisFixtureLimitOverrideStore(
+            StringRedisTemplate redis, ObjectProvider<ScopeRiskConfigOutbox> outbox) {
         this.redis = redis;
+        this.outbox = outbox.getIfAvailable();
     }
 
     @Override
@@ -56,16 +67,59 @@ public class RedisFixtureLimitOverrideStore implements FixtureLimitOverrideStore
         }
         Instant at = override.updatedAt() != null ? override.updatedAt() : Instant.now();
         fields.put("updatedAt", String.valueOf(at.toEpochMilli()));
-        redis.delete(key);
-        if (!fields.isEmpty()) {
-            redis.opsForHash().putAll(key, fields);
-        }
+        String matchCode = override.matchCode();
+        redis.execute(new SessionCallback<List<Object>>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public List<Object> execute(RedisOperations operations) {
+                operations.multi();
+                operations.delete(key);
+                if (!fields.isEmpty()) {
+                    operations.opsForHash().putAll(key, fields);
+                }
+                enqueueTx(operations, matchCode);
+                return operations.exec();
+            }
+        });
     }
 
     @Override
     public void delete(String matchCode) {
-        if (matchCode != null) {
-            redis.delete(KEY_PREFIX + matchCode);
+        if (matchCode == null) {
+            return;
+        }
+        String key = KEY_PREFIX + matchCode;
+        redis.execute(new SessionCallback<List<Object>>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public List<Object> execute(RedisOperations operations) {
+                operations.multi();
+                operations.delete(key);
+                enqueueTx(operations, matchCode);
+                return operations.exec();
+            }
+        });
+    }
+
+    @Override
+    public List<FixtureLimitOverride> listAll() {
+        Set<String> keys = redis.keys(KEY_PREFIX + "*");
+        if (keys == null || keys.isEmpty()) {
+            return List.of();
+        }
+        List<FixtureLimitOverride> out = new ArrayList<>();
+        for (String redisKey : keys) {
+            String matchCode = redisKey.substring(KEY_PREFIX.length());
+            get(matchCode).ifPresent(out::add);
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void enqueueTx(RedisOperations operations, String matchCode) {
+        if (outbox != null && outbox.isRelayEnabled()) {
+            outbox.enqueueInTransaction(
+                    (RedisOperations<String, String>) operations, LimitScopeType.MATCH, matchCode);
         }
     }
 

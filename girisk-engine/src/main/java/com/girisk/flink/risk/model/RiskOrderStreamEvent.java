@@ -1,5 +1,7 @@
 package com.girisk.flink.risk.model;
 
+import com.girisk.flink.risk.config.EffectiveScopeRiskParams;
+
 import java.io.Serializable;
 
 /** pre PENDING 试探 或 post 状态回传，统一进入场次敞口算子。 */
@@ -15,6 +17,10 @@ public final class RiskOrderStreamEvent implements Serializable {
     public final Kind kind;
     public final EnrichedFootballOrder prePending;
     public final OrderPostStatusUpdate postUpdate;
+    /**
+     * 由 {@code girisk.config.v1} enrich 算子填充；null 时下游回退 Job CLI 默认。
+     */
+    public EffectiveScopeRiskParams scopeParams;
 
     private RiskOrderStreamEvent(
             Kind kind, EnrichedFootballOrder prePending, OrderPostStatusUpdate postUpdate) {

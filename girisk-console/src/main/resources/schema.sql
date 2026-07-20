@@ -1,7 +1,7 @@
--- Risk Platform Schema
+-- Risk Platform Schema (PostgreSQL 16；H2 local 请用 MODE=PostgreSQL)
 
 CREATE TABLE IF NOT EXISTS risk_strategy (
-    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id          BIGSERIAL PRIMARY KEY,
     code        VARCHAR(64)  NOT NULL UNIQUE,
     name        VARCHAR(128) NOT NULL,
     scenario    VARCHAR(64)  NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS risk_strategy (
 );
 
 CREATE TABLE IF NOT EXISTS risk_rule (
-    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id           BIGSERIAL PRIMARY KEY,
     strategy_id  BIGINT       NOT NULL,
     code         VARCHAR(64)  NOT NULL,
     name         VARCHAR(128) NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS risk_rule (
 );
 
 CREATE TABLE IF NOT EXISTS risk_list_entry (
-    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id          BIGSERIAL PRIMARY KEY,
     list_type   VARCHAR(16)  NOT NULL,
     list_key    VARCHAR(64)  NOT NULL,
     list_value  VARCHAR(256) NOT NULL,
@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS risk_list_entry (
     expires_at  TIMESTAMP,
     enabled     BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS risk_decision_log (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     request_id      VARCHAR(64)  NOT NULL,
     order_id        VARCHAR(64)  NOT NULL,
     user_id         VARCHAR(64)  NOT NULL,
@@ -71,11 +71,12 @@ CREATE TABLE IF NOT EXISTS risk_decision_log (
     reasons_json    TEXT,
     versions_json   VARCHAR(1024),
     feature_snapshot_json TEXT,
+    evidence_json   TEXT,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS sys_user (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     username        VARCHAR(64)  NOT NULL UNIQUE,
     password_hash   VARCHAR(128) NOT NULL,
     display_name    VARCHAR(64)  NOT NULL,
@@ -85,7 +86,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
 );
 
 CREATE TABLE IF NOT EXISTS risk_case (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     case_no         VARCHAR(32)  NOT NULL UNIQUE,
     decision_log_id BIGINT       NOT NULL,
     order_id        VARCHAR(64)  NOT NULL,
@@ -109,7 +110,7 @@ CREATE TABLE IF NOT EXISTS risk_case (
 
 -- 配置发布（版本化 + 审批）
 CREATE TABLE IF NOT EXISTS risk_config_release (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     config_epoch    BIGINT       NOT NULL UNIQUE,
     scope           VARCHAR(64)  NOT NULL DEFAULT 'global',
     status          VARCHAR(32)  NOT NULL DEFAULT 'DRAFT',
@@ -132,7 +133,7 @@ CREATE TABLE IF NOT EXISTS risk_config_release (
 
 -- 场次风险物化视图（模拟 Flink → Redis，供运营大盘）
 CREATE TABLE IF NOT EXISTS risk_fixture_view (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id                  BIGSERIAL PRIMARY KEY,
     fixture_id          VARCHAR(64)  NOT NULL UNIQUE,
     home_team           VARCHAR(128) NOT NULL,
     away_team           VARCHAR(128) NOT NULL,
@@ -148,7 +149,7 @@ CREATE TABLE IF NOT EXISTS risk_fixture_view (
 );
 
 CREATE TABLE IF NOT EXISTS risk_event (
-    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id          BIGSERIAL PRIMARY KEY,
     event_type  VARCHAR(64)  NOT NULL,
     severity    VARCHAR(16)  NOT NULL DEFAULT 'INFO',
     order_id    VARCHAR(64),
@@ -158,19 +159,20 @@ CREATE TABLE IF NOT EXISTS risk_event (
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_decision_log_order ON risk_decision_log(order_id);
-CREATE INDEX idx_decision_log_user ON risk_decision_log(user_id);
-CREATE INDEX idx_decision_log_created ON risk_decision_log(created_at);
-CREATE INDEX idx_decision_log_trace ON risk_decision_log(trace_id);
-CREATE INDEX idx_case_status ON risk_case(status);
-CREATE INDEX idx_list_type_value ON risk_list_entry(list_type, list_value);
-CREATE INDEX idx_event_created ON risk_event(created_at);
-CREATE INDEX idx_config_release_status ON risk_config_release(status);
-CREATE INDEX idx_fixture_view_worst ON risk_fixture_view(worst_loss_cents);
+CREATE INDEX IF NOT EXISTS idx_decision_log_order ON risk_decision_log(order_id);
+CREATE INDEX IF NOT EXISTS idx_decision_log_user ON risk_decision_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_decision_log_created ON risk_decision_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_decision_log_trace ON risk_decision_log(trace_id);
+CREATE INDEX IF NOT EXISTS idx_decision_log_request ON risk_decision_log(request_id);
+CREATE INDEX IF NOT EXISTS idx_case_status ON risk_case(status);
+CREATE INDEX IF NOT EXISTS idx_list_type_value ON risk_list_entry(list_type, list_value);
+CREATE INDEX IF NOT EXISTS idx_event_created ON risk_event(created_at);
+CREATE INDEX IF NOT EXISTS idx_config_release_status ON risk_config_release(status);
+CREATE INDEX IF NOT EXISTS idx_fixture_view_worst ON risk_fixture_view(worst_loss_cents);
 
 -- Sports exposure / proportional limit
 CREATE TABLE IF NOT EXISTS sports_match (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id                  BIGSERIAL PRIMARY KEY,
     match_code          VARCHAR(64)  NOT NULL UNIQUE,
     home_team           VARCHAR(128) NOT NULL,
     away_team           VARCHAR(128) NOT NULL,
@@ -188,7 +190,7 @@ CREATE TABLE IF NOT EXISTS sports_match (
 );
 
 CREATE TABLE IF NOT EXISTS sports_bet_log (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id              BIGSERIAL PRIMARY KEY,
     request_id      VARCHAR(64)  NOT NULL,
     order_id        VARCHAR(64)  NOT NULL UNIQUE,
     match_code      VARCHAR(64)  NOT NULL,
@@ -205,5 +207,5 @@ CREATE TABLE IF NOT EXISTS sports_bet_log (
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_sports_bet_match ON sports_bet_log(match_code);
-CREATE INDEX idx_sports_bet_created ON sports_bet_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_sports_bet_match ON sports_bet_log(match_code);
+CREATE INDEX IF NOT EXISTS idx_sports_bet_created ON sports_bet_log(created_at);

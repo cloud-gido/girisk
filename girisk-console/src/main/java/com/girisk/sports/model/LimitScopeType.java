@@ -2,7 +2,7 @@ package com.girisk.sports.model;
 
 import com.girisk.common.exception.BusinessException;
 
-/** 限额覆盖层级：解析时赛事 > 联赛 > 球类 > 总体 > 全局默认。 */
+/** 限额/门控层级：解析时单赛事 > 联赛 > 球类 > 默认(总体) > 系统默认。 */
 public enum LimitScopeType {
     OVERALL,
     SPORT,

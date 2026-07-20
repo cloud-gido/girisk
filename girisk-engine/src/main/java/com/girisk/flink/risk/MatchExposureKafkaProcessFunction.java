@@ -1,5 +1,6 @@
 package com.girisk.flink.risk;
 
+import com.girisk.flink.risk.config.EffectiveScopeRiskParams;
 import com.girisk.flink.risk.excel.FootballSportsOrder;
 import com.girisk.flink.risk.grid.ScoreGridParams;
 import com.girisk.flink.risk.limit.ExposureLimitGate;
@@ -59,6 +60,8 @@ public final class MatchExposureKafkaProcessFunction
     private final boolean postFeedbackEnabled;
 
     private transient ListState<StoredOrder> openOrdersState;
+    /** 本场全部已见订单（含拒单），用于「完全不拦截」对照敞口。 */
+    private transient ListState<StoredOrder> allSeenOrdersState;
     private transient ValueState<Long> lastEventTimeState;
     /** 场次敞口截止事件时间（开赛 + cleanupDelayMs，epoch ms）。 */
     private transient ValueState<Long> matchCutoffEventTimeState;
@@ -109,6 +112,9 @@ public final class MatchExposureKafkaProcessFunction
         openOrdersState =
                 getRuntimeContext()
                         .getListState(new ListStateDescriptor<>("open-orders-by-event-time", StoredOrder.class));
+        allSeenOrdersState =
+                getRuntimeContext()
+                        .getListState(new ListStateDescriptor<>("all-seen-orders-by-event-time", StoredOrder.class));
         lastEventTimeState =
                 getRuntimeContext().getState(new ValueStateDescriptor<>("last-event-time", Long.class));
         matchCutoffEventTimeState =
@@ -126,7 +132,7 @@ public final class MatchExposureKafkaProcessFunction
             }
             return;
         }
-        processPrePending(event.prePending, ctx, out);
+        processPrePending(event.prePending, event.scopeParams, ctx, out);
     }
 
     private void applyPostUpdate(OrderPostStatusUpdate update, Context ctx) throws Exception {
@@ -135,7 +141,11 @@ public final class MatchExposureKafkaProcessFunction
         openOrdersState.update(stored);
     }
 
-    private void processPrePending(EnrichedFootballOrder value, Context ctx, Collector<String> out)
+    private void processPrePending(
+            EnrichedFootballOrder value,
+            EffectiveScopeRiskParams scopeParams,
+            Context ctx,
+            Collector<String> out)
             throws Exception {
         if (!ensureEventTimeCleanupScheduled(ctx, value)) {
             return;
@@ -168,6 +178,7 @@ public final class MatchExposureKafkaProcessFunction
         lastEventTimeState.update(Math.max(lastTs == null ? Long.MIN_VALUE : lastTs, value.orderTimeMs));
 
         List<StoredOrder> stored = snapshotOrders();
+        List<StoredOrder> allSeen = snapshotAllSeen();
         String dedupeKey = ConfirmedOrderWindowState.normalizeOrderId(value.order.orderId);
         boolean duplicate = !dedupeKey.isEmpty() && ConfirmedOrderWindowState.containsOrderId(stored, dedupeKey);
         if (duplicate) {
@@ -180,15 +191,26 @@ public final class MatchExposureKafkaProcessFunction
         }
 
         List<FootballSportsOrder> priorAccepted = ConfirmedOrderWindowState.toOrders(stored);
+        double effDelta = scopeParams != null ? scopeParams.limitDelta : limitDelta;
+        double effSeed = scopeParams != null ? scopeParams.seedPayoutYuan : seedPayoutYuan;
+        double effMaxWorst = scopeParams != null ? scopeParams.maxWorstLossYuan : maxWorstLossYuan;
+        double effMaxBet = scopeParams != null ? scopeParams.maxBetPayoutYuan : 0.0;
+        boolean tradingOn = scopeParams == null || scopeParams.tradingEnabled;
+        boolean limitOn = scopeParams == null || scopeParams.limitGateEnabled;
+        boolean exposureOn = scopeParams == null || scopeParams.exposureGateEnabled;
         MatchTriggerAcceptance acceptance =
                 MatchTriggerAcceptance.evaluate(
                         priorAccepted,
                         value,
                         duplicate,
                         gridParams.grid,
-                        limitDelta,
-                        seedPayoutYuan,
-                        maxWorstLossYuan,
+                        effDelta,
+                        effSeed,
+                        effMaxWorst,
+                        effMaxBet,
+                        tradingOn,
+                        limitOn,
+                        exposureOn,
                         postFeedbackEnabled);
 
         if (!postFeedbackEnabled && acceptance.persistTrigger()) {
@@ -204,6 +226,14 @@ public final class MatchExposureKafkaProcessFunction
                     value.order.orderId,
                     value.order.stakeYuan);
         }
+        // 全量对照：接单/拒单都记入（按 orderId 去重），与离线「完全不拦截」一致
+        if (!duplicate
+                && !dedupeKey.isEmpty()
+                && !ConfirmedOrderWindowState.containsOrderId(allSeen, dedupeKey)) {
+            allSeen.add(new StoredOrder(value.orderTimeMs, value.order));
+            allSeen.sort(Comparator.comparingLong(s -> s.orderTimeMs));
+            allSeenOrdersState.update(allSeen);
+        }
 
         String matchKey = ctx.getCurrentKey();
         long publishedAtMs = ctx.timerService().currentProcessingTime();
@@ -211,12 +241,13 @@ public final class MatchExposureKafkaProcessFunction
                 value,
                 matchKey,
                 acceptance,
+                ConfirmedOrderWindowState.toOrders(allSeen),
                 gridParams,
                 eventTimeOutOfOrder,
                 publishedAtMs,
-                limitDelta,
-                seedPayoutYuan,
-                maxWorstLossYuan,
+                effDelta,
+                effSeed,
+                effMaxWorst,
                 emitFlags.summary,
                 emitFlags.limit,
                 emitFlags.business,
@@ -245,6 +276,7 @@ public final class MatchExposureKafkaProcessFunction
         }
         int cleared = snapshotOrders().size();
         openOrdersState.clear();
+        allSeenOrdersState.clear();
         lastEventTimeState.clear();
         System.err.printf(
                 Locale.ROOT,
@@ -289,6 +321,14 @@ public final class MatchExposureKafkaProcessFunction
     private List<StoredOrder> snapshotOrders() throws Exception {
         List<StoredOrder> list = new ArrayList<>();
         for (StoredOrder s : openOrdersState.get()) {
+            list.add(s);
+        }
+        return list;
+    }
+
+    private List<StoredOrder> snapshotAllSeen() throws Exception {
+        List<StoredOrder> list = new ArrayList<>();
+        for (StoredOrder s : allSeenOrdersState.get()) {
             list.add(s);
         }
         return list;

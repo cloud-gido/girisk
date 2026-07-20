@@ -3,14 +3,17 @@ import {
   AppstoreOutlined,
   ArrowLeftOutlined,
   DollarOutlined,
+  DownOutlined,
   RightOutlined,
   TrophyOutlined,
 } from '@ant-design/icons';
 import {
+  Alert,
   Breadcrumb,
   Button,
   Card,
   Col,
+  Collapse,
   Empty,
   Row,
   Segmented,
@@ -21,8 +24,11 @@ import {
   Typography,
   message,
 } from 'antd';
+import type { TableProps } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import ScopeDutyConfigPanel from '../components/ScopeDutyConfigPanel';
+import ScopeGateDutyBar from '../components/ScopeGateDutyBar';
 import ScopeLimitDutyBar from '../components/ScopeLimitDutyBar';
 import { sportsApi } from '../api/sportsClient';
 import { riskApi } from '../api/riskClient';
@@ -36,7 +42,6 @@ import type {
   SportsMatch,
   SportsMatchView,
 } from '../types';
-import { marketGroupKey, stakesFromGroups } from '../utils/marketGroupKey';
 import { buildOutcomeRows, groupStakeTotal } from '../utils/proportionalLimit';
 import { resolveMatchFromFixture } from '../utils/exposureNav';
 import {
@@ -48,8 +53,18 @@ import { selectionLabel } from '../utils/sportsLabels';
 import { outcomeLimitColumns } from '../utils/sportsLimitColumns';
 import { LevelTag } from '../utils/tags';
 
-/** 总体 / 球类 / 联赛 / 赛事：每层可直进列表，再点进详情 */
+/** 总体 / 球类 / 联赛 / 赛事：列表内展开看本场汇总，减少整页跳转 */
 type Level = ExposureLevel;
+
+type MatchExpandCache = Record<
+  string,
+  {
+    loading: boolean;
+    error?: string;
+    view?: SportsMatchView;
+    fixture?: RiskFixtureView | null;
+  }
+>;
 
 const SPORT_META: Record<string, { label: string; emoji: string }> = {
   football: { label: '足球', emoji: '⚽' },
@@ -93,12 +108,14 @@ export default function LiabilityBoardPage() {
   const [detail, setDetail] = useState<SportsMatchView | null>(null);
   const [matchFixture, setMatchFixture] = useState<RiskFixtureView | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [editStakes, setEditStakes] = useState<Record<string, Record<string, number>>>({});
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [expandedMatchCodes, setExpandedMatchCodes] = useState<string[]>([]);
+  const [expandCache, setExpandCache] = useState<MatchExpandCache>({});
+  const [pendingExpandCode, setPendingExpandCode] = useState<string | null>(null);
 
   const setQuery = useCallback((next: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
@@ -115,29 +132,32 @@ export default function LiabilityBoardPage() {
     });
   }, [setParams]);
 
-  const openMatch = useCallback(async (code: string) => {
-    setDetailLoading(true);
-    setDetailError(null);
-    setMatchFixture(null);
+  const openMatch = useCallback(async (code: string, silent = false) => {
+    if (!silent) {
+      setDetailLoading(true);
+      setDetailError(null);
+      setMatchFixture(null);
+    }
     try {
       const view = await sportsApi.match(code);
       setDetail(view);
-      setEditStakes(stakesFromGroups(view.marketGroups));
       try {
         setMatchFixture(await riskApi.fixture(code));
       } catch {
-        setMatchFixture(null);
+        if (!silent) setMatchFixture(null);
       }
     } catch (e) {
-      setDetail(null);
-      setDetailError((e as Error).message || '加载赛事失败');
+      if (!silent) {
+        setDetail(null);
+        setDetailError((e as Error).message || '加载赛事失败');
+      }
     } finally {
-      setDetailLoading(false);
+      if (!silent) setDetailLoading(false);
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [d, fx] = await Promise.all([
         sportsApi.dashboard(),
@@ -146,13 +166,25 @@ export default function LiabilityBoardPage() {
       setDash(d);
       setFixtures(fx);
     } catch (e) {
-      message.error((e as Error).message);
+      if (!silent) message.error((e as Error).message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { void refresh(false); }, [refresh]);
+
+  // 敞口看板：取 Redis 最近事实即可，刷新可慢一点（15s）
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void refresh(true);
+      if (level === 'match' && matchCode) {
+        void openMatch(matchCode, true);
+      }
+    }, 5_000);
+    return () => window.clearInterval(id);
+  }, [refresh, openMatch, level, matchCode]);
 
   // 无 URL 参数时恢复上次选择
   useEffect(() => {
@@ -162,14 +194,14 @@ export default function LiabilityBoardPage() {
       const saved = readExposureNav();
       if (saved?.level) {
         setQuery({
-          level: saved.level,
+          // 默认回到列表层，不自动恢复值班深页
+          level: saved.level === 'match' ? 'match' : saved.level,
           sport: saved.sport,
           league: saved.league,
-          match: saved.match,
           filter: saved.filter,
         });
       } else {
-        setQuery({ level: 'overall' });
+        setQuery({ level: 'match' });
       }
     }
     setHydrated(true);
@@ -265,41 +297,155 @@ export default function LiabilityBoardPage() {
     });
   };
 
+  const loadMatchExpand = useCallback(async (code: string, force = false) => {
+    let shouldFetch = true;
+    setExpandCache((prev) => {
+      if (!force && (prev[code]?.loading || prev[code]?.view)) {
+        shouldFetch = false;
+        return prev;
+      }
+      return {
+        ...prev,
+        [code]: {
+          loading: true,
+          view: prev[code]?.view,
+          fixture: prev[code]?.fixture,
+          error: undefined,
+        },
+      };
+    });
+    if (!shouldFetch) return;
+    try {
+      const view = await sportsApi.match(code);
+      let fixture: RiskFixtureView | null = null;
+      try {
+        fixture = await riskApi.fixture(code);
+      } catch {
+        fixture = null;
+      }
+      setExpandCache((prev) => ({ ...prev, [code]: { loading: false, view, fixture } }));
+    } catch (e) {
+      setExpandCache((prev) => ({
+        ...prev,
+        [code]: {
+          loading: false,
+          view: prev[code]?.view,
+          fixture: prev[code]?.fixture,
+          error: (e as Error).message || '加载失败',
+        },
+      }));
+    }
+  }, []);
+
+  const toggleMatchExpand = useCallback((m: SportsMatch) => {
+    const code = m.matchCode;
+    setExpandedMatchCodes((prev) => {
+      const open = prev.includes(code);
+      if (open) return prev.filter((c) => c !== code);
+      void loadMatchExpand(code);
+      return [code];
+    });
+  }, [loadMatchExpand]);
+
+  const matchListExpandable = useMemo((): TableProps<SportsMatch>['expandable'] => ({
+    expandedRowKeys: expandedMatchCodes,
+    onExpand: (expanded, record) => {
+      if (expanded) {
+        setExpandedMatchCodes([record.matchCode]);
+        void loadMatchExpand(record.matchCode);
+      } else {
+        setExpandedMatchCodes((prev) => prev.filter((c) => c !== record.matchCode));
+      }
+    },
+    expandIcon: ({ expanded, onExpand, record }) => (
+      <Button
+        type="text"
+        size="small"
+        aria-label={expanded ? '收起' : '展开'}
+        icon={<DownOutlined rotate={expanded ? 180 : 0} style={{ transition: 'transform .2s' }} />}
+        onClick={(e) => {
+          e.stopPropagation();
+          onExpand(record, e);
+        }}
+      />
+    ),
+    expandedRowRender: (m) => (
+      <MatchInlinePanel
+        matchCode={m.matchCode}
+        cache={expandCache[m.matchCode]}
+        onRetry={() => void loadMatchExpand(m.matchCode, true)}
+        onOpenDuty={() => enterMatch(m)}
+        onBetTrial={() => navigate(`/girisk/sandbox/bet?match=${m.matchCode}`)}
+      />
+    ),
+  }), [expandedMatchCodes, expandCache, loadMatchExpand, navigate]);
+
+  useEffect(() => {
+    if (expandedMatchCodes.length === 0) return;
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      for (const code of expandedMatchCodes) {
+        void loadMatchExpand(code, true);
+      }
+    }, 5_000);
+    return () => window.clearInterval(id);
+  }, [expandedMatchCodes, loadMatchExpand]);
+
   const openFixture = (r: RiskFixtureView) => {
     const m = resolveMatchFromFixture(r, allMatches);
     if (!m) {
       message.warning(`场次 ${r.fixtureId} 尚未接入敞口赛事库，无法下钻盘口`);
       return;
     }
-    enterMatch(m);
+    if (level === 'match' && !matchCode) {
+      toggleMatchExpand(m);
+      return;
+    }
+    // 总览等高危入口：先进列表再展开，不跳值班深页
+    setPendingExpandCode(m.matchCode);
+    setQuery({
+      level: 'match',
+      sport: ofSport(m),
+      league: ofLeague(m),
+      filter: filterOver ? 'over' : undefined,
+    });
   };
 
-  const updateStake = (group: MarketGroupView, selection: string, value: number | null) => {
-    const key = marketGroupKey(group);
-    setEditStakes((prev) => ({
-      ...prev,
-      [key]: { ...prev[key], [selection]: value ?? 0 },
-    }));
-  };
+  useEffect(() => {
+    if (!pendingExpandCode || level !== 'match' || matchCode) return;
+    const m = allMatches.find((x) => x.matchCode === pendingExpandCode);
+    if (!m) return;
+    toggleMatchExpand(m);
+    setPendingExpandCode(null);
+  }, [pendingExpandCode, level, matchCode, allMatches, toggleMatchExpand]);
 
   const rowsForGroup = (g: MarketGroupView) => {
-    const stakes = editStakes[marketGroupKey(g)] ?? g.stakes;
-    return buildOutcomeRows(Object.keys(g.stakes), stakes, detail?.delta ?? 0.2);
+    if (g.outcomes?.length) {
+      return g.outcomes.map((o) => ({
+        selection: o.selection,
+        stake: Number(o.stake) || 0,
+        targetAmount: Number(o.targetAmount) || 0,
+        maxAllowedAmount: Number(o.maxAllowedAmount) || 0,
+        acceptMax: Number(o.acceptMax) || 0,
+      }));
+    }
+    return buildOutcomeRows(
+      Object.keys(g.stakes || {}),
+      g.stakes || {},
+      Number(detail?.delta) || 0.2,
+      Number(detail?.seedPayoutYuan) || 0,
+    );
   };
 
-  const simulatedTotal = useMemo(() => {
+  const flinkMarketTotal = useMemo(() => {
     if (!detail) return 0;
-    return Math.round(detail.marketGroups.reduce((sum, g) => {
-      const stakes = editStakes[marketGroupKey(g)] ?? g.stakes;
-      return sum + groupStakeTotal(stakes);
-    }, 0) * 100) / 100;
-  }, [detail, editStakes]);
+    return Math.round(detail.marketGroups.reduce((sum, g) => sum + groupStakeTotal(g.stakes || {}), 0) * 100) / 100;
+  }, [detail]);
 
   const runCheck = async (code: string) => {
     try {
       const view = await sportsApi.exposureCheck(code);
       setDetail(view);
-      setEditStakes(stakesFromGroups(view.marketGroups));
       message.success('已刷新赛事敞口');
       refresh();
     } catch (e) {
@@ -340,7 +486,7 @@ export default function LiabilityBoardPage() {
     }
   };
 
-  /** 顶栏切换：直接进入该层；带上上次选中的实体（无则显示列表） */
+  /** 顶栏切换：赛事层默认进列表（行内展开），不自动跳值班深页 */
   const goLevel = (v: Level) => {
     const f = filterOver ? 'over' : undefined;
     const saved = readExposureNav();
@@ -369,10 +515,23 @@ export default function LiabilityBoardPage() {
       level: 'match',
       sport: sportId || saved?.sport,
       league: leagueId || saved?.league,
-      match: matchCode || saved?.match,
       filter: f,
     });
   };
+
+  const contextLabel = useMemo(() => {
+    if (level === 'overall') return '平台总览';
+    if (level === 'sport') {
+      return sportId ? `${sportMeta(sportId).label} · 球类` : '选择球类';
+    }
+    if (level === 'league') {
+      if (!leagueId) return '选择联赛';
+      return `${currentLeagueName || leagueId} · 联赛`;
+    }
+    if (matchCode && detail) return `${detail.homeTeam} vs ${detail.awayTeam}`;
+    if (matchCode) return matchCode;
+    return filterOver ? '超额赛事' : '赛事值班台';
+  }, [level, sportId, leagueId, currentLeagueName, matchCode, detail, filterOver]);
 
   if (loading && !dash) {
     return <Spin size="large" style={{ display: 'block', marginTop: 100 }} />;
@@ -380,189 +539,189 @@ export default function LiabilityBoardPage() {
 
   return (
     <div className="liability-board">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-        <div>
-          <h2 style={{ marginBottom: 4 }}>敞口看板</h2>
-          <p style={{ margin: 0 }}>
-            每层可直进列表 · 点进详情 · 总体/球类/联赛/赛事均可改限额（赛事 &gt; 联赛 &gt; 球类 &gt; 总体）
-          </p>
+      <header className="liability-chrome">
+        <div className="liability-chrome-main">
+          <div className="liability-chrome-title">
+            <h2>敞口看板</h2>
+            <p>主路径：赛事列表 → 展开看本场事实。限额按层继承（赛事 &gt; 联赛 &gt; 球类 &gt; 总体）。</p>
+          </div>
+          <Space wrap className="liability-chrome-actions">
+            <Segmented
+              size="small"
+              value={filterOver ? 'over' : 'all'}
+              onChange={(v) => setQuery({
+                level,
+                sport: sportId,
+                league: leagueId,
+                match: matchCode,
+                filter: v === 'over' ? 'over' : undefined,
+              })}
+              options={[
+                { label: '全部', value: 'all' },
+                { label: '仅超额', value: 'over' },
+              ]}
+            />
+            <Button size="small" loading={demoLoading} onClick={() => loadDemoData(true)}>重灌演示</Button>
+            <Button size="small" type="primary" ghost onClick={() => { void refresh(false); }}>刷新</Button>
+          </Space>
         </div>
-        <Space wrap>
+        <div className="liability-chrome-nav">
           <Segmented
-            value={filterOver ? 'over' : 'all'}
-            onChange={(v) => setQuery({
-              level,
-              sport: sportId,
-              league: leagueId,
-              match: matchCode,
-              filter: v === 'over' ? 'over' : undefined,
-            })}
+            value={level}
+            onChange={(v) => goLevel(v as Level)}
             options={[
-              { label: '全部', value: 'all' },
-              { label: '仅超额', value: 'over' },
+              { label: '总览', value: 'overall' },
+              { label: '球类', value: 'sport' },
+              { label: '联赛', value: 'league' },
+              { label: '赛事值班', value: 'match' },
             ]}
           />
-          <Button loading={demoLoading} onClick={() => loadDemoData(true)}>重灌演示</Button>
-          <Button onClick={refresh}>刷新</Button>
-        </Space>
-      </div>
-
-      <div className="liability-rail">
-        <Segmented
-          value={level}
-          onChange={(v) => goLevel(v as Level)}
-          options={[
-            { label: '总体', value: 'overall' },
-            { label: '球类', value: 'sport' },
-            { label: '联赛', value: 'league' },
-            { label: '赛事', value: 'match' },
-          ]}
-        />
-      </div>
-
-      <Breadcrumb
-        style={{ marginBottom: 16 }}
-        items={[
-          { title: <a onClick={() => setQuery({ level: 'overall', filter: filterOver ? 'over' : undefined })}>总体</a> },
-          ...(level !== 'overall' ? [{
-            title: <a onClick={() => setQuery({ level: 'sport', filter: filterOver ? 'over' : undefined })}>球类</a>,
-          }] : []),
-          ...(sportId && (level === 'sport' || level === 'league' || level === 'match') ? [{
-            title: (
-              <a onClick={() => setQuery({
-                level: 'sport',
-                sport: sportId,
-                filter: filterOver ? 'over' : undefined,
-              })}
-              >
-                {sportMeta(sportId).label}
-              </a>
-            ),
-          }] : []),
-          ...(level === 'league' || level === 'match' ? [{
-            title: (
-              <a onClick={() => setQuery({
-                level: 'league',
-                sport: sportId,
-                filter: filterOver ? 'over' : undefined,
-              })}
-              >
-                联赛
-              </a>
-            ),
-          }] : []),
-          ...(leagueId && (level === 'league' || level === 'match') ? [{
-            title: (
-              <a onClick={() => setQuery({
-                level: 'league',
-                sport: sportId,
-                league: leagueId,
-                filter: filterOver ? 'over' : undefined,
-              })}
-              >
-                {currentLeagueName}
-              </a>
-            ),
-          }] : []),
-          ...(level === 'match' ? [{
-            title: (
-              <a onClick={() => setQuery({
-                level: 'match',
-                sport: sportId,
-                league: leagueId,
-                filter: filterOver ? 'over' : undefined,
-              })}
-              >
-                赛事
-              </a>
-            ),
-          }] : []),
-          ...(matchCode && level === 'match' ? [{
-            title: detail ? `${detail.homeTeam} vs ${detail.awayTeam}` : matchCode,
-          }] : []),
-        ]}
-      />
+          <div className="liability-chrome-context">
+            <Typography.Text strong>{contextLabel}</Typography.Text>
+            {(level !== 'overall' || matchCode) && (
+              <Breadcrumb
+                className="liability-chrome-crumb"
+                items={[
+                  { title: <a onClick={() => setQuery({ level: 'overall', filter: filterOver ? 'over' : undefined })}>总览</a> },
+                  ...(sportId && level !== 'overall' ? [{
+                    title: (
+                      <a onClick={() => setQuery({ level: 'sport', sport: sportId, filter: filterOver ? 'over' : undefined })}>
+                        {sportMeta(sportId).label}
+                      </a>
+                    ),
+                  }] : []),
+                  ...(leagueId && (level === 'league' || level === 'match') ? [{
+                    title: (
+                      <a onClick={() => setQuery({
+                        level: 'league',
+                        sport: sportId,
+                        league: leagueId,
+                        filter: filterOver ? 'over' : undefined,
+                      })}
+                      >
+                        {currentLeagueName || leagueId}
+                      </a>
+                    ),
+                  }] : []),
+                  ...(level === 'match' ? [{
+                    title: (
+                      <a onClick={() => setQuery({
+                        level: 'match',
+                        sport: sportId,
+                        league: leagueId,
+                        filter: filterOver ? 'over' : undefined,
+                      })}
+                      >
+                        赛事列表
+                      </a>
+                    ),
+                  }] : []),
+                  ...(matchCode && level === 'match' ? [{
+                    title: detail ? `${detail.homeTeam} vs ${detail.awayTeam}` : matchCode,
+                  }] : []),
+                ]}
+              />
+            )}
+          </div>
+        </div>
+      </header>
 
       {level === 'overall' && dash && (
         <div className="liability-pane">
-          <ScopeLimitDutyBar
-            mode="overall"
-            title="总体限额（值班）"
-            hint="平台默认；球类/联赛/赛事未单独覆盖时继承此处。"
-            onSaved={refresh}
-          />
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12} lg={6}>
-              <Card className="stat-card" hoverable onClick={() => setQuery({ level: 'match', filter: filterOver ? 'over' : undefined })}>
+          <Card className="liability-hero content-card" size="small">
+            <div className="liability-hero-row">
+              <div>
+                <Typography.Title level={4} style={{ margin: 0 }}>今日值班入口</Typography.Title>
+                <Typography.Text type="secondary">
+                  直接进入赛事列表，点行展开看拦截汇总与盘口，无需层层下钻。
+                </Typography.Text>
+              </div>
+              <Space wrap>
+                <Button
+                  type="primary"
+                  size="large"
+                  onClick={() => setQuery({ level: 'match', filter: filterOver ? 'over' : undefined })}
+                >
+                  打开赛事值班台 <RightOutlined />
+                </Button>
+                <Button size="large" onClick={() => setQuery({ level: 'match', filter: 'over' })}>
+                  仅看超额
+                </Button>
+              </Space>
+            </div>
+          </Card>
+
+          <Row gutter={[12, 12]} style={{ marginTop: 16 }}>
+            <Col xs={12} sm={12} lg={6}>
+              <Card className="stat-card liability-stat" hoverable onClick={() => setQuery({ level: 'match', filter: filterOver ? 'over' : undefined })}>
                 <Typography.Text type="secondary">在管赛事</Typography.Text>
                 <div className="liability-kpi"><TrophyOutlined /> {dash.matchCount}</div>
-                <div className="liability-kpi-hint">查看全部赛事 <RightOutlined /></div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card className="stat-card">
+            <Col xs={12} sm={12} lg={6}>
+              <Card className="stat-card liability-stat">
                 <Typography.Text type="secondary">盘口数</Typography.Text>
                 <div className="liability-kpi" style={{ color: '#1677ff' }}><AppstoreOutlined /> {dash.outcomeCount}</div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card className="stat-card" hoverable onClick={() => setQuery({ level: 'match', filter: 'over' })}>
+            <Col xs={12} sm={12} lg={6}>
+              <Card className="stat-card liability-stat" hoverable onClick={() => setQuery({ level: 'match', filter: 'over' })}>
                 <Typography.Text type="secondary">超额盘口</Typography.Text>
-                <div className="liability-kpi" style={{ color: dash.overLimitOutcomeCount ? '#ff4d4f' : '#8c8c8c' }}>
+                <div className="liability-kpi" style={{ color: dash.overLimitOutcomeCount ? '#cf1322' : undefined }}>
                   <AlertOutlined /> {dash.overLimitOutcomeCount}
                 </div>
               </Card>
             </Col>
-            <Col xs={24} sm={12} lg={6}>
-              <Card className="stat-card">
+            <Col xs={12} sm={12} lg={6}>
+              <Card className="stat-card liability-stat">
                 <Typography.Text type="secondary">总投注（本金）</Typography.Text>
                 <div className="liability-kpi"><DollarOutlined /> {Number(dash.totalStake).toLocaleString()}</div>
               </Card>
             </Col>
           </Row>
 
-          <Typography.Title level={5} style={{ marginTop: 24, marginBottom: 12 }}>球类速览</Typography.Title>
-          <Row gutter={[16, 16]}>
+          <ScopeDutyConfigPanel
+            mode="overall"
+            label="平台总体"
+            onSaved={refresh}
+          />
+
+          <div className="liability-section-head">
+            <Typography.Title level={5} style={{ margin: 0 }}>球类速览</Typography.Title>
+            <Typography.Text type="secondary">点选进入球类 / 联赛配置限额与停盘</Typography.Text>
+          </div>
+          <Row gutter={[12, 12]}>
             {sportStats.map((s) => (
               <Col xs={24} md={12} key={s.id}>
-                <Card
-                  className="content-card liability-sport-card"
-                  hoverable
+                <button
+                  type="button"
+                  className="liability-sport-tile"
                   onClick={() => setQuery({ level: 'sport', sport: s.id, filter: filterOver ? 'over' : undefined })}
                 >
-                  <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }}>
-                    <div>
-                      <Typography.Title level={4} style={{ margin: 0 }}>{s.emoji} {s.label}</Typography.Title>
-                      <Typography.Text type="secondary">{s.leagueCount} 个联赛 · {s.matchCount} 场比赛</Typography.Text>
-                    </div>
-                    <Button
-                      type="primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setQuery({ level: 'sport', sport: s.id, filter: filterOver ? 'over' : undefined });
-                      }}
-                    >
-                      进入球类 <RightOutlined />
-                    </Button>
-                  </Space>
-                  <Row gutter={16} style={{ marginTop: 16 }}>
-                    <Col span={12}><Typography.Text type="secondary">投注合计</Typography.Text><div>{s.totalStake.toLocaleString()}</div></Col>
-                    <Col span={12}><Typography.Text type="secondary">限额中</Typography.Text><div>{s.limitModeCount}</div></Col>
-                  </Row>
-                </Card>
+                  <div className="liability-sport-tile-top">
+                    <span className="liability-sport-tile-name">{s.emoji} {s.label}</span>
+                    <RightOutlined />
+                  </div>
+                  <div className="liability-sport-tile-meta">
+                    <span>{s.leagueCount} 联赛</span>
+                    <span>{s.matchCount} 场</span>
+                    <span>投注 {s.totalStake.toLocaleString()}</span>
+                    <span>限额中 {s.limitModeCount}</span>
+                  </div>
+                </button>
               </Col>
             ))}
           </Row>
 
           <Card
             className="content-card"
-            title="高危赛事（物化视图）"
+            title="Redis 高危快照"
             extra={(
               <Button type="link" onClick={() => setQuery({ level: 'match', filter: filterOver ? 'over' : undefined })}>
-                全部赛事
+                去赛事列表
               </Button>
             )}
-            style={{ marginTop: 16 }}
+            style={{ marginTop: 20 }}
           >
             <Table
               size="small"
@@ -590,25 +749,16 @@ export default function LiabilityBoardPage() {
                     </Button>
                   ),
                 },
-                { title: '接单', width: 70, render: (_: unknown, r: RiskFixtureView) => r.replayStats?.acceptedCount ?? r.confirmedOrders },
-                {
-                  title: '拦截',
-                  width: 90,
-                  render: (_: unknown, r: RiskFixtureView) => {
-                    const s = r.replayStats;
-                    if (!s) return '—';
-                    return `${s.rejectedTotal ?? 0}`;
-                  },
-                },
+                { title: '接单', width: 70, dataIndex: 'confirmedOrders' },
                 { title: '最差亏损', dataIndex: 'worstLossCents', width: 110, render: (v: number) => `¥${(v / 100).toLocaleString()}` },
                 { title: '最差比分', dataIndex: 'worstScore', width: 80, render: (v?: string) => v || '—' },
                 { title: '等级', dataIndex: 'riskLevel', width: 90, render: (v: string) => <LevelTag value={v} /> },
                 {
                   title: '',
-                  width: 88,
+                  width: 72,
                   render: (_: unknown, r: RiskFixtureView) => (
                     <Button type="link" size="small" onClick={() => openFixture(r)}>
-                      进赛事 <RightOutlined />
+                      展开
                     </Button>
                   ),
                 },
@@ -621,38 +771,47 @@ export default function LiabilityBoardPage() {
       {level === 'sport' && (
         <div className="liability-pane">
           {!sportId ? (
-            <Card className="content-card" title="全部球类">
-              <Row gutter={[16, 16]}>
+            <Card className="content-card" title="选择球类">
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="球类限额与停盘需进入具体球类后配置"
+                description="平台总体配置在「总体」页；选中球类后可编辑该球类限额，并批量停/开该球类全部赛事。"
+              />
+              <Row gutter={[12, 12]}>
                 {sportStats.map((s) => (
                   <Col xs={24} md={12} key={s.id}>
-                    <Card
-                      className="liability-match-card"
-                      hoverable
+                    <button
+                      type="button"
+                      className="liability-sport-tile"
                       onClick={() => setQuery({ level: 'sport', sport: s.id, filter: filterOver ? 'over' : undefined })}
-                      title={`${s.emoji} ${s.label}`}
                     >
-                      <Row gutter={12} style={{ marginBottom: 12 }}>
-                        <Col span={8}><Typography.Text type="secondary">联赛</Typography.Text><div style={{ fontWeight: 600 }}>{s.leagueCount}</div></Col>
-                        <Col span={8}><Typography.Text type="secondary">赛事</Typography.Text><div style={{ fontWeight: 600 }}>{s.matchCount}</div></Col>
-                        <Col span={8}><Typography.Text type="secondary">限额中</Typography.Text><div style={{ fontWeight: 600 }}>{s.limitModeCount}</div></Col>
-                      </Row>
-                      <Button type="primary" block>进入球类 <RightOutlined /></Button>
-                    </Card>
+                      <div className="liability-sport-tile-top">
+                        <span className="liability-sport-tile-name">{s.emoji} {s.label}</span>
+                        <RightOutlined />
+                      </div>
+                      <div className="liability-sport-tile-meta">
+                        <span>{s.leagueCount} 联赛</span>
+                        <span>{s.matchCount} 场</span>
+                        <span>限额中 {s.limitModeCount}</span>
+                      </div>
+                    </button>
                   </Col>
                 ))}
               </Row>
             </Card>
           ) : (
             <>
-              <ScopeLimitDutyBar
+              <ScopeDutyConfigPanel
                 mode="sport"
+                label={`${sportMeta(sportId).label} · 球类`}
                 sportCode={sportId}
-                title={`${sportMeta(sportId).label} · 球类限额`}
                 onSaved={refresh}
               />
               <Card
                 className="content-card"
-                title={`${sportMeta(sportId).label} · 联赛列表`}
+                title={`${sportMeta(sportId).label} · 联赛`}
                 extra={(
                   <Button type="link" icon={<ArrowLeftOutlined />} onClick={() => setQuery({ level: 'sport', filter: filterOver ? 'over' : undefined })}>
                     全部球类
@@ -662,40 +821,28 @@ export default function LiabilityBoardPage() {
                 {leagueStats.length === 0 ? (
                   <Empty description="该球类暂无联赛" />
                 ) : (
-                  <Row gutter={[16, 16]}>
-                    {leagueStats.map((l) => (
-                      <Col xs={24} md={12} key={`${l.sport}:${l.id}`}>
-                        <Card
-                          className="liability-match-card"
-                          hoverable
-                          onClick={() => setQuery({
-                            level: 'league',
-                            sport: l.sport,
-                            league: l.id,
-                            filter: filterOver ? 'over' : undefined,
-                          })}
-                          title={l.name}
-                          extra={<Typography.Text type="secondary">{l.id}</Typography.Text>}
-                        >
-                          <Row gutter={12} style={{ marginBottom: 16 }}>
-                            <Col span={8}>
-                              <Typography.Text type="secondary">赛事数</Typography.Text>
-                              <div style={{ fontWeight: 600 }}>{l.matchCount}</div>
-                            </Col>
-                            <Col span={8}>
-                              <Typography.Text type="secondary">投注合计</Typography.Text>
-                              <div style={{ fontWeight: 600 }}>{l.totalStake.toLocaleString()}</div>
-                            </Col>
-                            <Col span={8}>
-                              <Typography.Text type="secondary">限额中</Typography.Text>
-                              <div style={{ fontWeight: 600 }}>{l.limitModeCount}</div>
-                            </Col>
-                          </Row>
-                          <Button type="primary" block>进入联赛 <RightOutlined /></Button>
-                        </Card>
-                      </Col>
-                    ))}
-                  </Row>
+                  <Table
+                    size="middle"
+                    rowKey={(r) => `${r.sport}:${r.id}`}
+                    dataSource={leagueStats}
+                    pagination={false}
+                    onRow={(l) => ({
+                      onClick: () => setQuery({
+                        level: 'league',
+                        sport: l.sport,
+                        league: l.id,
+                        filter: filterOver ? 'over' : undefined,
+                      }),
+                      style: { cursor: 'pointer' },
+                    })}
+                    columns={[
+                      { title: '联赛', dataIndex: 'name' },
+                      { title: '代码', dataIndex: 'id', width: 140 },
+                      { title: '赛事', dataIndex: 'matchCount', width: 80 },
+                      { title: '投注合计', dataIndex: 'totalStake', width: 120, render: (v: number) => v.toLocaleString() },
+                      { title: '限额中', dataIndex: 'limitModeCount', width: 80 },
+                    ]}
+                  />
                 )}
               </Card>
             </>
@@ -707,6 +854,13 @@ export default function LiabilityBoardPage() {
         <div className="liability-pane">
           {!leagueId ? (
             <Card className="content-card" title="全部联赛">
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+                message="联赛限额与停盘需进入具体联赛后配置"
+                description="选中联赛后可编辑该联赛限额，并批量停/开该联赛全部赛事。平台总体 / 球类配置在对应层级页。"
+              />
               {leagueStats.length === 0 ? (
                 <Empty description="暂无联赛" />
               ) : (
@@ -755,16 +909,23 @@ export default function LiabilityBoardPage() {
             </Card>
           ) : (
             <>
-              <ScopeLimitDutyBar
+              <ScopeDutyConfigPanel
                 mode="league"
+                label={`${currentLeagueName} · 联赛`}
                 sportCode={sportId || 'football'}
                 leagueCode={leagueId}
-                title={`${currentLeagueName} · 联赛限额`}
                 onSaved={refresh}
               />
               <Card
-                className="content-card"
-                title={`${currentLeagueName} · 赛事列表`}
+                className="content-card liability-match-list-card"
+                title={(
+                  <div className="liability-list-title">
+                    <span>{currentLeagueName} · 赛事</span>
+                    <Typography.Text type="secondary" className="liability-list-hint">
+                      {leagueMatches.length} 场 · 点行展开本场事实
+                    </Typography.Text>
+                  </div>
+                )}
                 extra={(
                   <Button
                     type="link"
@@ -779,35 +940,31 @@ export default function LiabilityBoardPage() {
                   <Empty description="该联赛暂无赛事" />
                 ) : (
                   <Table
-                    size="small"
+                    className="liability-match-table"
+                    size="middle"
                     rowKey="matchCode"
                     dataSource={leagueMatches}
                     pagination={false}
-                    onRow={(m) => ({ onClick: () => enterMatch(m), style: { cursor: 'pointer' } })}
+                    expandable={matchListExpandable}
+                    onRow={(m) => ({
+                      onClick: () => toggleMatchExpand(m),
+                      style: { cursor: 'pointer' },
+                    })}
                     columns={[
                       {
                         title: '对阵',
                         render: (_: unknown, m: SportsMatch) => (
                           <Space>
-                            <span>{m.homeTeam} vs {m.awayTeam}</span>
+                            <span className="liability-match-name">{m.homeTeam} vs {m.awayTeam}</span>
                             <Tag color={m.status === 'SUSPENDED' ? 'red' : m.limitMode ? 'orange' : 'green'}>
                               {m.status === 'SUSPENDED' ? '已停盘' : m.limitMode ? '限额中' : '正常'}
                             </Tag>
                           </Space>
                         ),
                       },
-                      { title: '代码', dataIndex: 'matchCode', width: 160 },
+                      { title: '代码', dataIndex: 'matchCode', width: 140 },
                       { title: '投注合计', width: 120, render: (_: unknown, m: SportsMatch) => Number(m.currentExposure).toLocaleString() },
                       { title: 'δ', width: 70, render: (_: unknown, m: SportsMatch) => Number(m.delta) },
-                      {
-                        title: '',
-                        width: 90,
-                        render: (_: unknown, m: SportsMatch) => (
-                          <Button type="link" size="small" onClick={(e) => { e.stopPropagation(); enterMatch(m); }}>
-                            详情 <RightOutlined />
-                          </Button>
-                        ),
-                      },
                     ]}
                   />
                 )}
@@ -820,43 +977,49 @@ export default function LiabilityBoardPage() {
       {level === 'match' && (
         <div className="liability-pane">
           {!matchCode && (
-            <Card className="content-card" title={filterOver ? '超额赛事' : '全部赛事'}>
+            <Card
+              className="content-card liability-match-list-card"
+              title={(
+                <div className="liability-list-title">
+                  <span>{filterOver ? '超额赛事' : '赛事值班台'}</span>
+                  <Typography.Text type="secondary" className="liability-list-hint">
+                    {matchList.length} 场 · 点左侧箭头或整行展开 · 限额/停盘进值班页
+                  </Typography.Text>
+                </div>
+              )}
+            >
               {matchList.length === 0 ? (
                 <Empty description="暂无赛事">
                   <Button type="primary" loading={demoLoading} onClick={() => loadDemoData(false)}>灌入演示数据</Button>
                 </Empty>
               ) : (
                 <Table
-                  size="small"
+                  className="liability-match-table"
+                  size="middle"
                   rowKey="matchCode"
                   dataSource={matchList}
-                  pagination={{ pageSize: 20 }}
-                  onRow={(m) => ({ onClick: () => enterMatch(m), style: { cursor: 'pointer' } })}
+                  pagination={{ pageSize: 20, showSizeChanger: false }}
+                  expandable={matchListExpandable}
+                  onRow={(m) => ({
+                    onClick: () => toggleMatchExpand(m),
+                    style: { cursor: 'pointer' },
+                  })}
                   columns={[
-                    { title: '球类', width: 80, render: (_: unknown, m: SportsMatch) => sportMeta(ofSport(m)).label },
-                    { title: '联赛', width: 140, render: (_: unknown, m: SportsMatch) => leagueTitle(m) },
+                    { title: '球类', width: 72, render: (_: unknown, m: SportsMatch) => sportMeta(ofSport(m)).label },
+                    { title: '联赛', width: 120, render: (_: unknown, m: SportsMatch) => leagueTitle(m) },
                     {
                       title: '对阵',
                       render: (_: unknown, m: SportsMatch) => (
                         <Space>
-                          <span>{m.homeTeam} vs {m.awayTeam}</span>
+                          <span className="liability-match-name">{m.homeTeam} vs {m.awayTeam}</span>
                           <Tag color={m.status === 'SUSPENDED' ? 'red' : m.limitMode ? 'orange' : 'green'}>
                             {m.status === 'SUSPENDED' ? '已停盘' : m.limitMode ? '限额中' : '正常'}
                           </Tag>
                         </Space>
                       ),
                     },
-                    { title: '投注合计', width: 120, render: (_: unknown, m: SportsMatch) => Number(m.currentExposure).toLocaleString() },
+                    { title: '投注合计', width: 110, render: (_: unknown, m: SportsMatch) => Number(m.currentExposure).toLocaleString() },
                     { title: '阈值', width: 100, render: (_: unknown, m: SportsMatch) => Number(m.exposureThreshold).toLocaleString() },
-                    {
-                      title: '',
-                      width: 90,
-                      render: (_: unknown, m: SportsMatch) => (
-                        <Button type="link" size="small" onClick={(e) => { e.stopPropagation(); enterMatch(m); }}>
-                          详情 <RightOutlined />
-                        </Button>
-                      ),
-                    },
                   ]}
                 />
               )}
@@ -881,10 +1044,10 @@ export default function LiabilityBoardPage() {
           )}
           {matchCode && detail && (
             <Card
-              className="content-card"
+              className="content-card liability-duty-page"
               title={
                 <Space wrap>
-                  <span>{detail.homeTeam} vs {detail.awayTeam}</span>
+                  <span className="liability-match-name">{detail.homeTeam} vs {detail.awayTeam}</span>
                   <Tag color={detail.status === 'SUSPENDED' ? 'red' : detail.limitMode ? 'orange' : 'green'}>
                     {detail.status === 'SUSPENDED' ? '已停盘' : detail.limitMode ? '限额中' : '正常'}
                   </Tag>
@@ -905,7 +1068,7 @@ export default function LiabilityBoardPage() {
                       filter: filterOver ? 'over' : undefined,
                     })}
                   >
-                    赛事列表
+                    返回列表
                   </Button>
                   <Button
                     size="small"
@@ -916,7 +1079,6 @@ export default function LiabilityBoardPage() {
                     {detail.status === 'SUSPENDED' ? '开盘' : '停盘'}
                   </Button>
                   <Button size="small" onClick={() => runCheck(detail.matchCode)}>刷新敞口</Button>
-                  <Button size="small" onClick={() => setEditStakes(stakesFromGroups(detail.marketGroups))}>恢复数据</Button>
                   <Button
                     size="small"
                     type="primary"
@@ -928,67 +1090,76 @@ export default function LiabilityBoardPage() {
                 </Space>
               }
             >
-              <ScopeLimitDutyBar
-                mode="match"
-                matchCode={detail.matchCode}
-                title="赛事限额（值班）"
-                hint="本场最高优先级；未覆盖字段继承联赛→球类→总体。"
-                onSaved={() => { openMatch(detail.matchCode); refresh(); }}
-              />
+              <DutyLimitsFold label="本场门控与限额（值班编辑）">
+                <ScopeGateDutyBar
+                  mode="match"
+                  matchCode={detail.matchCode}
+                  onSaved={() => { openMatch(detail.matchCode); refresh(); }}
+                />
+                <ScopeLimitDutyBar
+                  mode="match"
+                  matchCode={detail.matchCode}
+                  title="赛事限额"
+                  hint="本场最高优先级；未覆盖字段继承联赛→球类→默认。"
+                  onSaved={() => { openMatch(detail.matchCode); refresh(); }}
+                />
+              </DutyLimitsFold>
 
-              <Typography.Title level={5} style={{ marginTop: 0 }}>拦截结果汇总（本场）</Typography.Title>
-              <MatchInterceptSummary
-                stats={matchFixture?.replayStats}
-                fallback={{
-                  acceptedStakeYuan: simulatedTotal,
-                  maxWorstLossYuan: Number(detail.maxWorstLossYuan ?? detail.exposureThreshold),
-                  delta: Number(detail.delta),
-                  seedPayoutYuan: detail.seedPayoutYuan ?? matchFixture?.replayStats?.seedPayoutYuan,
-                }}
-              />
-
-              <div style={{ margin: '28px 0 12px' }}>
-                <Typography.Title level={5} style={{ margin: 0 }}>
-                  各盘口明细
-                  <Typography.Text type="secondary" style={{ fontSize: 13, fontWeight: 400, marginLeft: 12 }}>
-                    {detail.marketGroups.length} 个盘口 · 本场投注合计 {simulatedTotal.toLocaleString()}
-                  </Typography.Text>
-                </Typography.Title>
+              <div className="liability-section-head" style={{ marginTop: 8 }}>
+                <Typography.Title level={5} style={{ margin: 0 }}>拦截结果汇总</Typography.Title>
+                <Typography.Text type="secondary">Flink→Redis · 约 5s · 单笔见决策日志</Typography.Text>
               </div>
+              <MatchInterceptSummary liveView={matchFixture} match={detail} />
 
-              {detail.marketGroups.length === 0 ? (
-                <Empty description="该赛事暂无盘口数据" />
-              ) : (
-                detail.marketGroups.map((g) => {
-                  const mk = marketKeyOf(g);
-                  const rows = rowsForGroup(g);
-                  return (
-                    <Card
-                      key={mk}
-                      size="small"
-                      className="liability-market"
-                      title={<span>{g.marketLabel}{g.line ? ` · ${g.line}` : ''}</span>}
-                      style={{ marginBottom: 12 }}
-                    >
-                      <MarketGroupStatsStrip group={g} rows={rows} delta={Number(detail.delta)} />
-                      <Table
-                        size="small"
-                        pagination={false}
-                        rowKey="selection"
-                        scroll={{ x: 560 }}
-                        dataSource={rows}
-                        rowClassName={(row) => (row.stake > row.maxAllowedAmount ? 'row-over-limit' : '')}
-                        columns={outcomeLimitColumns({
-                          line: g.line,
-                          marketType: g.marketType,
-                          editable: true,
-                          onStakeChange: (selection, value) => updateStake(g, selection, value),
-                        })}
-                      />
-                    </Card>
-                  );
-                })
-              )}
+              <Collapse
+                className="liability-inline-markets"
+                bordered={false}
+                defaultActiveKey={['markets']}
+                style={{ marginTop: 24 }}
+                items={[{
+                  key: 'markets',
+                  label: (
+                    <span>
+                      各盘口明细（{detail.marketGroups.length}）
+                      <Typography.Text type="secondary" style={{ marginLeft: 8, fontWeight: 400 }}>
+                        Flink→Redis · 返彩口径 · 合计 {flinkMarketTotal.toLocaleString()}
+                      </Typography.Text>
+                    </span>
+                  ),
+                  children: detail.marketGroups.length === 0 ? (
+                    <Empty description="等待 Flink 盘口视图（girisk:view:fixture.marketGroups）" />
+                  ) : (
+                    detail.marketGroups.map((g) => {
+                      const mk = marketKeyOf(g);
+                      const rows = rowsForGroup(g);
+                      return (
+                        <Card
+                          key={mk}
+                          size="small"
+                          className="liability-market"
+                          title={<span>{g.marketLabel}{g.line ? ` · ${g.line}` : ''}</span>}
+                          style={{ marginBottom: 12 }}
+                        >
+                          <MarketGroupStatsStrip group={g} rows={rows} delta={Number(detail.delta)} />
+                          <Table
+                            size="small"
+                            pagination={false}
+                            rowKey="selection"
+                            scroll={{ x: 560 }}
+                            dataSource={rows}
+                            rowClassName={(row) => (row.stake > row.maxAllowedAmount ? 'row-over-limit' : '')}
+                            columns={outcomeLimitColumns({
+                              line: g.line,
+                              marketType: g.marketType,
+                              editable: false,
+                            })}
+                          />
+                        </Card>
+                      );
+                    })
+                  ),
+                }]}
+              />
             </Card>
           )}
         </div>
@@ -1024,27 +1195,154 @@ export default function LiabilityBoardPage() {
         </Card>
       )}
 
-      <style>{`
-        .liability-rail { margin-bottom: 16px; }
-        .liability-pane { animation: liabilityIn .28s ease; }
-        @keyframes liabilityIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: none; }
-        }
-        .liability-kpi {
-          font-size: 28px; font-weight: 600; margin-top: 8px;
-          display: flex; align-items: center; gap: 8px;
-        }
-        .liability-kpi-hint {
-          margin-top: 8px; font-size: 12px; color: #8c8c8c;
-          display: flex; align-items: center; gap: 4px;
-        }
-        .liability-sport-card:hover { transform: translateY(-2px); transition: transform .2s; }
-        .liability-sport-pill.active { border-color: #1677ff; background: #f0f5ff; }
-        .liability-match-card:hover { border-color: #1677ff; }
-        .liability-market.active { border-color: #1677ff; box-shadow: 0 0 0 1px #1677ff22; }
-        .row-over-limit td { background: #fff2f0 !important; }
-      `}</style>
+    </div>
+  );
+}
+
+function DutyLimitsFold({
+  label,
+  children,
+  defaultOpen = false,
+}: {
+  label: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <Collapse
+      className="liability-duty-fold"
+      bordered={false}
+      defaultActiveKey={defaultOpen ? ['limits'] : []}
+      items={[{
+        key: 'limits',
+        label: (
+          <span className="liability-duty-fold-label">
+            {label}
+            <Typography.Text type="secondary"> · 按需展开编辑</Typography.Text>
+          </span>
+        ),
+        children: <div className="liability-duty-fold-body">{children}</div>,
+      }]}
+    />
+  );
+}
+
+/** 赛事列表行内展开：拦截汇总 + 盘口只读 */
+function MatchInlinePanel({
+  matchCode,
+  cache,
+  onRetry,
+  onOpenDuty,
+  onBetTrial,
+}: {
+  matchCode: string;
+  cache?: MatchExpandCache[string];
+  onRetry: () => void;
+  onOpenDuty: () => void;
+  onBetTrial: () => void;
+}) {
+  if (!cache || (cache.loading && !cache.view)) {
+    return (
+      <div className="liability-inline-loading">
+        <Spin size="small" tip={`加载 ${matchCode}…`} />
+      </div>
+    );
+  }
+  if (cache.error && !cache.view) {
+    return (
+      <Empty
+        image={Empty.PRESENTED_IMAGE_SIMPLE}
+        description={cache.error || '加载失败'}
+        style={{ margin: '8px 0' }}
+      >
+        <Button size="small" onClick={onRetry}>重试</Button>
+      </Empty>
+    );
+  }
+  const view = cache.view;
+  if (!view) {
+    return (
+      <div className="liability-inline-loading">
+        <Spin size="small" tip={`加载 ${matchCode}…`} />
+      </div>
+    );
+  }
+  return (
+    <div className="liability-inline-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="liability-inline-toolbar">
+        <div>
+          <div className="liability-match-name">{view.homeTeam} vs {view.awayTeam}</div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {view.leagueName || view.leagueCode} · {matchCode}
+            {cache.loading ? ' · 刷新中…' : ''}
+          </Typography.Text>
+        </div>
+        <Space wrap>
+          <Button size="small" type="primary" disabled={view.status === 'SUSPENDED'} onClick={onBetTrial}>
+            投注试算
+          </Button>
+          <Button size="small" onClick={onOpenDuty}>
+            限额 / 停盘
+          </Button>
+        </Space>
+      </div>
+
+      <div className="liability-section-head">
+        <Typography.Text strong>拦截结果汇总</Typography.Text>
+        <Typography.Text type="secondary">Flink→Redis</Typography.Text>
+      </div>
+      <MatchInterceptSummary liveView={cache.fixture} match={view} />
+
+      <Collapse
+        className="liability-inline-markets"
+        bordered={false}
+        defaultActiveKey={['markets']}
+        items={[{
+          key: 'markets',
+          label: `各盘口明细（${view.marketGroups.length}）· Flink→Redis`,
+          children: view.marketGroups.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="等待 Flink 盘口视图" />
+          ) : (
+            view.marketGroups.map((g) => {
+              const rows = g.outcomes?.length
+                ? g.outcomes.map((o) => ({
+                    selection: o.selection,
+                    stake: Number(o.stake) || 0,
+                    targetAmount: Number(o.targetAmount) || 0,
+                    maxAllowedAmount: Number(o.maxAllowedAmount) || 0,
+                    acceptMax: Number(o.acceptMax) || 0,
+                  }))
+                : buildOutcomeRows(
+                    Object.keys(g.stakes || {}),
+                    g.stakes || {},
+                    Number(view.delta) || 0.2,
+                    Number(view.seedPayoutYuan) || 0,
+                  );
+              return (
+                <div key={`${g.marketType}|${g.line || ''}`} className="liability-inline-market">
+                  <div className="liability-inline-market-title">
+                    {g.marketLabel}{g.line ? ` · ${g.line}` : ''}
+                  </div>
+                  <MarketGroupStatsStrip group={g} rows={rows} delta={Number(view.delta) || 0.2} />
+                  <Table
+                    size="small"
+                    pagination={false}
+                    rowKey="selection"
+                    scroll={{ x: 480 }}
+                    dataSource={rows}
+                    rowClassName={(row) => (row.stake > row.maxAllowedAmount ? 'row-over-limit' : '')}
+                    columns={outcomeLimitColumns({
+                      line: g.line,
+                      marketType: g.marketType,
+                      editable: false,
+                    })}
+                  />
+                </div>
+              );
+            })
+          ),
+        }]}
+      />
     </div>
   );
 }
@@ -1084,52 +1382,98 @@ function StatTile({
   );
 }
 
-/** 赛事层：对齐产品 HTML「拦截结果汇总」 */
+/**
+ * 赛事层「拦截结果汇总」：固定 12 格产品指标（与离线回放同一套）。
+ * 优先 Redis replayStats；缺省时用实时窗口 + 场次限额参数补齐。
+ */
 function MatchInterceptSummary({
-  stats,
-  fallback,
+  liveView,
+  match,
 }: {
-  stats?: FixtureReplayStats | null;
-  fallback?: { acceptedStakeYuan?: number; maxWorstLossYuan?: number; delta?: number; seedPayoutYuan?: number };
+  liveView?: RiskFixtureView | null;
+  match?: SportsMatchView | null;
 }) {
-  if (!stats) {
+  if (!liveView && !match) {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="暂无整场拦截回放统计（请先跑 scripts/demo-germany-exposure.sh）"
+        description="暂无本场数据（确认 Flink 已写入 Redis 视图，且 URL match=fixtureId）"
         style={{ margin: '8px 0 16px' }}
       />
     );
   }
-  const rejected = stats.rejectedTotal ?? (stats.rejectedLimit ?? 0) + (stats.rejectedExposure ?? 0);
-  const seed = stats.seedPayoutYuan ?? fallback?.seedPayoutYuan ?? 5000;
-  const threshold = stats.maxWorstLossYuan ?? fallback?.maxWorstLossYuan ?? 200000;
-  const delta = stats.delta ?? fallback?.delta ?? 0.2;
+
+  const rs = mergeInterceptStats(liveView, match);
+  const riskLine =
+    rs.maxWorstLossYuan != null
+      ? `${fmtNum(rs.maxWorstLossYuan, 0)} / -${fmtNum(rs.maxWorstLossYuan, 0)}`
+      : '—';
 
   return (
     <div>
       <Row gutter={[12, 12]}>
-        <StatTile label="有效订单数" value={fmtNum(stats.totalOrders, 0)} />
-        <StatTile label="接收订单数" value={fmtNum(stats.acceptedCount, 0)} tone="ok" />
-        <StatTile label="拦截订单数" value={fmtNum(rejected, 0)} tone="danger" />
-        <StatTile label="限额拦截数" value={fmtNum(stats.rejectedLimit, 0)} tone="danger" />
-        <StatTile label="风险拦截数" value={fmtNum(stats.rejectedExposure, 0)} tone="danger" />
-        <StatTile label="初始已投注金额/盘口" value={fmtNum(seed)} />
-        <StatTile label="风险阈值 / 盈亏线" value={`${fmtNum(threshold)} / -${fmtNum(threshold)}`} />
-        <StatTile label="完全不拦截最差盈亏" value={fmtNum(stats.noRiskWorstPnlYuan)} tone="danger" />
-        <StatTile label="完全不拦截最差比分" value={stats.noRiskWorstScore || '—'} />
-        <StatTile label="拦截后最差盈亏" value={fmtNum(stats.withRiskWorstPnlYuan)} tone="danger" />
-        <StatTile label="拦截后最差比分" value={stats.withRiskWorstScore || '—'} />
-        <StatTile label="拦截后累计投注金额" value={fmtNum(stats.acceptedStakeYuan)} />
+        <StatTile label="有效订单数" value={fmtNum(rs.totalOrders, 0)} />
+        <StatTile label="接收订单数" value={fmtNum(rs.acceptedCount, 0)} tone="ok" />
+        <StatTile label="拦截订单数" value={fmtNum(rs.rejectedTotal, 0)} tone="danger" />
+        <StatTile label="重复订单数" value={fmtNum(rs.duplicateCount, 0)} tone="muted" />
+        <StatTile label="限额拦截数" value={fmtNum(rs.rejectedLimit, 0)} tone="danger" />
+        <StatTile label="风险拦截数" value={fmtNum(rs.rejectedExposure, 0)} tone="danger" />
+        <StatTile label="初始已投注金额/盘口" value={fmtNum(rs.seedPayoutYuan, 0)} />
+        <StatTile label="风险阈值 / 盈亏线" value={riskLine} />
+        <StatTile label="完全不拦截最差盈亏" value={fmtNum(rs.noRiskWorstPnlYuan)} tone="danger" />
+        <StatTile label="完全不拦截最差比分" value={rs.noRiskWorstScore || '—'} />
+        <StatTile label="拦截后最差盈亏" value={fmtNum(rs.withRiskWorstPnlYuan)} tone="danger" />
+        <StatTile label="拦截后最差比分" value={rs.withRiskWorstScore || '—'} />
+        <StatTile label="拦截后累计投注金额" value={fmtNum(rs.acceptedStakeYuan)} />
       </Row>
       <Typography.Paragraph type="secondary" style={{ marginTop: 16, marginBottom: 0, fontSize: 13 }}>
-        共处理有效订单 {fmtNum(stats.totalOrders, 0)} 条，接收 {fmtNum(stats.acceptedCount, 0)} 条，
-        拦截 {fmtNum(rejected, 0)} 条。其中限额拦截 {fmtNum(stats.rejectedLimit, 0)} 条、
-        风险敞口拦截 {fmtNum(stats.rejectedExposure, 0)} 条。
-        参数：种子 {fmtNum(seed)} · δ={delta} · 风险阈值 {fmtNum(threshold)}。
+        有效 = 接收 + 拦截 + 重复：{fmtNum(rs.totalOrders, 0)} = {fmtNum(rs.acceptedCount, 0)} +{' '}
+        {fmtNum(rs.rejectedTotal, 0)} + {fmtNum(rs.duplicateCount, 0)}
+        {' · '}限额拦截: {fmtNum(rs.rejectedLimit, 0)}条, 风险拦截: {fmtNum(rs.rejectedExposure, 0)}条
+        {rs.delta != null ? ` · δ=${rs.delta}` : ''}
+        {liveView?.updatedAt ? ` · Redis ${liveView.updatedAt}` : ''}
+        。重复单 decision 仍为 PASS，不进接单窗口；「完全不拦截」含已见订单对照网格。
       </Typography.Paragraph>
     </div>
   );
+}
+
+function mergeInterceptStats(
+  liveView?: RiskFixtureView | null,
+  match?: SportsMatchView | null,
+): FixtureReplayStats {
+  const rs = liveView?.replayStats ?? {};
+  const accepted = rs.acceptedCount ?? liveView?.confirmedOrders ?? 0;
+  const rejected = rs.rejectedTotal ?? 0;
+  const duplicate = rs.duplicateCount ?? 0;
+  const rejectedLimit = rs.rejectedLimit ?? 0;
+  const rejectedExposure = rs.rejectedExposure ?? 0;
+  const worstYuanAbs = (liveView?.worstLossCents || 0) / 100;
+  const withRiskPnl =
+    rs.withRiskWorstPnlYuan ?? (liveView != null ? -Math.abs(worstYuanAbs) : undefined);
+  const withRiskScore = rs.withRiskWorstScore || liveView?.worstScore || undefined;
+  const seed = rs.seedPayoutYuan ?? match?.seedPayoutYuan;
+  const maxWorst = rs.maxWorstLossYuan ?? match?.maxWorstLossYuan ?? match?.exposureThreshold;
+  const delta = rs.delta ?? (match?.delta != null ? Number(match.delta) : undefined);
+  // 展示恒等式：有效 = 接收 + 拦截 + 重复（不以漂移的 Redis totalOrders 为准）
+  const accounted = accepted + rejected + duplicate;
+
+  return {
+    totalOrders: accounted,
+    acceptedCount: accepted,
+    rejectedTotal: rejected,
+    duplicateCount: duplicate,
+    rejectedLimit,
+    rejectedExposure,
+    seedPayoutYuan: seed,
+    maxWorstLossYuan: maxWorst,
+    delta,
+    noRiskWorstPnlYuan: rs.noRiskWorstPnlYuan,
+    noRiskWorstScore: rs.noRiskWorstScore,
+    withRiskWorstPnlYuan: withRiskPnl,
+    withRiskWorstScore: withRiskScore,
+    acceptedStakeYuan: rs.acceptedStakeYuan,
+  };
 }
 
 /** 盘口层：当前盘口汇总，放在方向明细表之上 */

@@ -2,19 +2,28 @@ package com.girisk.flink.risk.kafka;
 
 import com.girisk.common.RiskTopics;
 
-/** 足球订单作业默认 Kafka topic。 */
+/**
+ * 足球订单作业 Kafka topic。
+ *
+ * <p>默认只写 {@link #DECISION}；DETAIL/SUMMARY/LIMIT/BUSINESS 为兼容旧链路的常量名，
+ * 作业默认不再自动创建/写出（需显式 {@code --sink.topic.*}）。
+ */
 public final class FootballOrderKafkaTopics {
 
-    /** 明细：订单 × 假设比分（每格一行）。 */
+    /** @deprecated 旧出口，默认不写；仅作 CLI 显式重开时的名字常量。 */
+    @Deprecated
     public static final String DETAIL = "girisk.football.detail.result";
 
-    /** 汇总：场次嵌套快照 schemaVersion=7（每场每次触发一条）。 */
+    /** @deprecated 旧出口，默认不写。 */
+    @Deprecated
     public static final String SUMMARY = "girisk.football.summary.result";
 
-    /** 等比例限额：场次各盘口 b_max 快照 schemaVersion=3（含 trigger 前限额）。 */
+    /** @deprecated 旧出口，默认不写。 */
+    @Deprecated
     public static final String LIMIT = "girisk.football.limit.result";
 
-    /** 业务方汇总：summaryData（无 assumedScores）+ limitData（与 Limit v3 相同）。 */
+    /** @deprecated 旧出口，默认不写。 */
+    @Deprecated
     public static final String BUSINESS = "girisk.football.business.result";
 
     /** 滚球实时比分（Genius FixtureScoreUpdatedEvent / FootballMatchSummary / 简易 JSON）。 */

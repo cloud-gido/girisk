@@ -1,16 +1,22 @@
 import { Button, Card, Col, Empty, Row, Space, Statistic, Table, Tag, Typography } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { api } from '../api/client';
 import { riskApi } from '../api/riskClient';
-import type { RiskDecisionLog, RiskEvaluateResponse, StreamStatus } from '../types';
+import SandboxTabs from '../components/SandboxTabs';
+import type { RiskDecisionLog, RiskEvaluateResponse, RiskEvent, StreamStatus } from '../types';
 import { DecisionTag, LevelTag } from '../utils/tags';
 
 type LiveRow = RiskEvaluateResponse & { receivedAt: string };
+
+const severityColor: Record<string, string> = { INFO: 'blue', WARN: 'orange', ERROR: 'red' };
 
 export default function StreamPage() {
   const [status, setStatus] = useState<StreamStatus | null>(null);
   const [liveFeed, setLiveFeed] = useState<LiveRow[]>([]);
   const [recent, setRecent] = useState<RiskDecisionLog[]>([]);
+  const [events, setEvents] = useState<RiskEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [sseOk, setSseOk] = useState(false);
 
   const refreshStatus = () => riskApi.streamStatus().then(setStatus).catch(() => setStatus(null));
@@ -19,6 +25,7 @@ export default function StreamPage() {
   useEffect(() => {
     refreshStatus();
     refreshRecent();
+    api.events(100).then(setEvents).finally(() => setEventsLoading(false));
     const timer = setInterval(() => {
       refreshStatus();
       refreshRecent();
@@ -55,9 +62,10 @@ export default function StreamPage() {
   return (
     <>
       <div className="page-header">
-        <h2>流量监控</h2>
-        <p>管线健康与实时决策流；发单与 Burst 请到调试沙箱 · 订单试算</p>
+        <h2>调试沙箱</h2>
+        <p>管线健康、SSE 推送与本地事件 — 联调观察用，不是责任盘 / 决策 SOT</p>
       </div>
+      <SandboxTabs />
 
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} sm={8} lg={4}>
@@ -105,8 +113,7 @@ export default function StreamPage() {
         extra={
           <Space>
             <Link to="/girisk/sandbox/order"><Button type="primary" size="small">去发单 / Burst</Button></Link>
-            <Link to="/girisk/decisions"><Button size="small">决策审计</Button></Link>
-            <Link to="/girisk/events"><Button size="small">事件流</Button></Link>
+            <Link to="/girisk/decisions"><Button size="small">决策中心（生产）</Button></Link>
           </Space>
         }
         style={{ marginBottom: 16 }}
@@ -126,7 +133,7 @@ export default function StreamPage() {
         </Space>
       </Card>
 
-      <Row gutter={16}>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col xs={24} lg={14}>
           <Card
             className="content-card"
@@ -167,7 +174,7 @@ export default function StreamPage() {
           </Card>
         </Col>
         <Col xs={24} lg={10}>
-          <Card className="content-card" title="近期决策审计" extra={<Link to="/girisk/decisions">全部</Link>}>
+          <Card className="content-card" title="近期决策快照" extra={<Link to="/girisk/decisions">决策中心</Link>}>
             <Table
               size="small"
               rowKey="id"
@@ -189,6 +196,25 @@ export default function StreamPage() {
           </Card>
         </Col>
       </Row>
+
+      <Card className="content-card" title="本地事件日志" extra={<Typography.Text type="secondary">Console 事件表，非 Flink 责任链</Typography.Text>}>
+        <Table
+          size="small"
+          rowKey="id"
+          loading={eventsLoading}
+          dataSource={events}
+          scroll={{ x: 1000 }}
+          pagination={{ pageSize: 10, size: 'small' }}
+          columns={[
+            { title: '时间', dataIndex: 'createdAt', width: 180 },
+            { title: '类型', dataIndex: 'eventType', width: 120, render: (v: string) => <Tag>{v}</Tag> },
+            { title: '级别', dataIndex: 'severity', width: 80, render: (v: string) => <Tag color={severityColor[v]}>{v}</Tag> },
+            { title: '标题', dataIndex: 'title', width: 180 },
+            { title: '订单', dataIndex: 'orderId', width: 160 },
+            { title: '详情', dataIndex: 'detail', ellipsis: true },
+          ]}
+        />
+      </Card>
     </>
   );
 }

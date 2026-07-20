@@ -17,6 +17,10 @@ public final class FootballSportsOrder implements Serializable {
     public String orderId;
     public String orderTime;
     public String userId;
+    /**
+     * 球类编码（配置继承 SPORT 层）；空则 Flink enrich 默认 {@code football}。
+     */
+    public String sportCode;
     public String league;
     public String homeTeam;
     public String awayTeam;

@@ -1,4 +1,6 @@
-# GiRisk — 公司级风控决策引擎总体方案（v3：单一决策出口）
+# GiRisk — 公司级风控决策平台总体方案（v3：单一决策出口）
+
+> **仓边界（2026-07）**：公司 GitLab 为全量 monorepo（含 Engine）；公开 GitHub 经 `scripts/sync-github.sh` 只带 Console + 契约。下文描述端到端架构。
 
 | 项 | 内容 |
 |----|------|
@@ -6,8 +8,8 @@
 | 文档版本 | v3.0（评审稿） |
 | 日期 | 2026-07-15 |
 | 状态 | 待评审：风控产品 / 交易 / 数据 / SRE |
-| 适用范围 | GiRisk Engine（`girisk-engine`）、GiRisk Console（`girisk-console`）、交易系统（契约对接方）、数据平台（Doris 审计） |
-| 前置文档 | [football-order-risk-pipeline-design.md](football-order-risk-pipeline-design.md)（现行 pre/post 架构）、[football-order-risk-limit-first-design.md](football-order-risk-limit-first-design.md)（v2 先限额后敞口）、[BRANDING.md](BRANDING.md) |
+| 适用范围 | GiRisk Console（本仓）、契约对接（交易 / 内部 Engine）、Doris 审计 |
+| 前置文档 | [BRANDING.md](BRANDING.md)；Engine 管线细设见内部仓 `docs/` |
 | 取代 | 四个输出 topic（detail / summary / limit / business）的对外契约；Console 体育投注在线裁决（`/api/v1/sports/bet/evaluate`） |
 
 ---

@@ -97,6 +97,10 @@ public class RedisFixtureViewReader {
                 : LocalDateTime.now();
         String level = worst >= 500_00 ? "HIGH" : worst >= 100_00 ? "MEDIUM" : "LOW";
         Map<String, Object> replayStats = parseReplayStats(str(hash.get("replayStats"), null));
+        List<Map<String, Object>> marketGroups = parseMarketGroups(str(hash.get("marketGroups"), null));
+        Double limitDelta = parseDouble(hash.get("limitDelta"));
+        Double seed = parseDouble(hash.get("initialSeedPayoutYuan"));
+        Long marketGroupsUpdatedAt = parseLongObj(hash.get("marketGroupsUpdatedAt"));
         return new RiskFixtureView(
                 syntheticId,
                 fixtureId,
@@ -111,7 +115,11 @@ public class RedisFixtureViewReader {
                 str(hash.get("rawSnapshot"), null),
                 level,
                 updated,
-                replayStats);
+                replayStats,
+                marketGroups,
+                limitDelta,
+                seed,
+                marketGroupsUpdatedAt);
     }
 
     private static Map<String, Object> parseReplayStats(String json) {
@@ -120,6 +128,17 @@ public class RedisFixtureViewReader {
         }
         try {
             return MAPPER.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static List<Map<String, Object>> parseMarketGroups(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return MAPPER.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
         } catch (Exception e) {
             return null;
         }
@@ -137,6 +156,28 @@ public class RedisFixtureViewReader {
             return Long.parseLong(o.toString());
         } catch (Exception e) {
             return 0;
+        }
+    }
+
+    private static Long parseLongObj(Object o) {
+        if (o == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(o.toString());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static Double parseDouble(Object o) {
+        if (o == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(o.toString());
+        } catch (Exception e) {
+            return null;
         }
     }
 }

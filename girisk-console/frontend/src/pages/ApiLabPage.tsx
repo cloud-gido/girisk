@@ -26,6 +26,7 @@ import {
   type ApiField,
 } from '../api/apiCatalog';
 import { getToken } from '../auth/session';
+import SandboxTabs from '../components/SandboxTabs';
 import { DecisionTag, LevelTag } from '../utils/tags';
 
 const BASE = '/api/v1';
@@ -225,9 +226,10 @@ export default function ApiLabPage() {
   return (
     <>
       <div className="page-header">
-        <h2>接口联调</h2>
-        <p>类似 Postman：选择接口、填写参数、发送请求、查看返回。供订单系统对接前本地验证。</p>
+        <h2>调试沙箱</h2>
+        <p>接口联调：选接口、填参、看返回 — 对接前本地验证，非生产监控</p>
       </div>
+      <SandboxTabs />
 
       <Row gutter={16}>
         <Col xs={24} lg={6}>

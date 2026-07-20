@@ -36,6 +36,7 @@ public class SportsBetRiskService {
     private final ExposureStore exposureStore;
     private final SportsExposureService exposureService;
     private final FixtureLimitParamsService limitParamsService;
+    private final ScopeGateService scopeGateService;
     private final long reserveTtlSeconds;
     private final boolean limitDecisionEnabled;
 
@@ -45,6 +46,7 @@ public class SportsBetRiskService {
             ExposureStore exposureStore,
             SportsExposureService exposureService,
             FixtureLimitParamsService limitParamsService,
+            ScopeGateService scopeGateService,
             @Value("${girisk.sports.reserve-ttl-seconds:30}") long reserveTtlSeconds,
             @Value("${girisk.sports.limit-decision-enabled:true}") boolean limitDecisionEnabled) {
         this.matchRepository = matchRepository;
@@ -52,6 +54,7 @@ public class SportsBetRiskService {
         this.exposureStore = exposureStore;
         this.exposureService = exposureService;
         this.limitParamsService = limitParamsService;
+        this.scopeGateService = scopeGateService;
         this.reserveTtlSeconds = reserveTtlSeconds;
         this.limitDecisionEnabled = limitDecisionEnabled;
     }
@@ -60,8 +63,9 @@ public class SportsBetRiskService {
     public SportsLimitStageResult evaluateStage(SportsBetEvaluateRequest req, boolean doReserve) {
         SportsMatch match = matchRepository.findByCode(req.matchCode())
                 .orElseThrow(() -> new BusinessException("比赛不存在: " + req.matchCode()));
-        if (!"ACTIVE".equals(match.status())) {
-            throw new BusinessException("比赛未开放投注");
+        ScopeGateService.EffectiveGates gates = scopeGateService.resolveForMatch(match);
+        if (!gates.tradingEnabled()) {
+            throw new BusinessException("比赛未开放投注（总开关关闭 · " + gates.tradingSource() + "）");
         }
 
         SportsMarketType marketType = SportsMarketType.from(req.marketType());
@@ -104,9 +108,19 @@ public class SportsBetRiskService {
         evidence.put("overrideActive", params.overrideActive());
         evidence.put("groupPayouts", groupPayouts);
         evidence.put("basis", "payout");
+        Map<String, Object> gateEv = new LinkedHashMap<>();
+        gateEv.put("tradingEnabled", gates.tradingEnabled());
+        gateEv.put("limitGateEnabled", gates.limitGateEnabled());
+        gateEv.put("exposureGateEnabled", gates.exposureGateEnabled());
+        gateEv.put("tradingSource", gates.tradingSource());
+        gateEv.put("limitGateSource", gates.limitGateSource());
+        gateEv.put("exposureGateSource", gates.exposureGateSource());
+        evidence.put("gates", gateEv);
 
         // Gate0: 单注绝对返彩上限
-        if (maxBetPayoutYuan != null && payoutNew.compareTo(maxBetPayoutYuan) > 0) {
+        if (gates.limitGateEnabled()
+                && maxBetPayoutYuan != null
+                && payoutNew.compareTo(maxBetPayoutYuan) > 0) {
             BigDecimal maxStake = maxBetPayoutYuan.divide(odds, 2, RoundingMode.FLOOR);
             if (maxStake.compareTo(BigDecimal.ZERO) < 0) maxStake = BigDecimal.ZERO;
             if (limitDecisionEnabled) {
@@ -125,7 +139,9 @@ public class SportsBetRiskService {
         }
 
         // Gate1: 返彩 >= b_max 拒（或 LIMIT）
-        if (decision == RiskDecision.PASS && payoutNew.compareTo(bMax) >= 0) {
+        if (gates.limitGateEnabled()
+                && decision == RiskDecision.PASS
+                && payoutNew.compareTo(bMax) >= 0) {
             if (limitDecisionEnabled && bMax.compareTo(BigDecimal.ZERO) > 0) {
                 decision = RiskDecision.LIMIT;
                 BigDecimal maxStake = bMax.subtract(new BigDecimal("0.01"))
@@ -143,7 +159,7 @@ public class SportsBetRiskService {
         }
 
         // Gate2: 试探加入本单后的最坏 liability
-        if (decision == RiskDecision.PASS) {
+        if (gates.exposureGateEnabled() && decision == RiskDecision.PASS) {
             Map<String, BigDecimal> trialStakes = new HashMap<>(groupStakes);
             trialStakes.merge(req.selection(), req.amount(), BigDecimal::add);
             Map<String, BigDecimal> oddsMap = new HashMap<>();
@@ -162,12 +178,15 @@ public class SportsBetRiskService {
                 expEv.put("thresholdCents", maxWorstLossCents);
                 expEv.put("worstSelection", liab.worstSelection());
                 expEv.put("liabilityBySelection", liab.liabilityBySelectionCents());
+                expEv.put("gates", gateEv);
                 reasons.add(new DecisionReason(
                         "R_EXPOSURE_WORST_LOSS", 1, "GATE2_EXPOSURE", "REJECT", reason, expEv));
             } else {
                 evidence.put("worstLiabilityCents", liab.worstLiabilityCents());
                 evidence.put("worstSelection", liab.worstSelection());
             }
+        } else if (!gates.exposureGateEnabled() && decision == RiskDecision.PASS) {
+            evidence.put("exposureGateSkipped", true);
         }
 
         // 预占（仅 PASS；LIMIT/REJECT/REVIEW 不占）

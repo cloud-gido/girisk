@@ -4,12 +4,18 @@ import com.girisk.config.SportsRiskProperties;
 import com.girisk.sports.dto.FixtureLimitOverrideRequest;
 import com.girisk.sports.model.SportsMatch;
 import com.girisk.sports.repository.SportsMatchRepository;
+import com.girisk.sports.outbox.ScopeRiskConfigOutbox;
 import com.girisk.sports.store.InMemoryFixtureLimitOverrideStore;
+import com.girisk.sports.store.InMemoryScopeGateOverrideStore;
 import com.girisk.sports.store.InMemoryScopeLimitOverrideStore;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,6 +34,9 @@ class FixtureLimitParamsServiceTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        "admin", "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
         matchRepository = new FakeMatchRepository();
         InMemoryFixtureLimitOverrideStore store = new InMemoryFixtureLimitOverrideStore();
         InMemoryScopeLimitOverrideStore scopeStore = new InMemoryScopeLimitOverrideStore();
@@ -36,7 +45,38 @@ class FixtureLimitParamsServiceTest {
         props.setSeedPayoutYuan(2000);
         props.setMaxWorstLossYuan(1000);
         props.setMaxBetPayoutYuan(0);
-        ScopeLimitParamsService scopeService = new ScopeLimitParamsService(scopeStore, store, props);
+        ScopeDutyAuth dutyAuth = new ScopeDutyAuth();
+        ObjectProvider<com.girisk.flink.ScopeRiskConfigKafkaPublisher> noPublisher =
+                new ObjectProvider<>() {
+                    @Override
+                    public com.girisk.flink.ScopeRiskConfigKafkaPublisher getObject() {
+                        return null;
+                    }
+
+                    @Override
+                    public com.girisk.flink.ScopeRiskConfigKafkaPublisher getObject(Object... args) {
+                        return null;
+                    }
+
+                    @Override
+                    public com.girisk.flink.ScopeRiskConfigKafkaPublisher getIfAvailable() {
+                        return null;
+                    }
+
+                    @Override
+                    public com.girisk.flink.ScopeRiskConfigKafkaPublisher getIfUnique() {
+                        return null;
+                    }
+                };
+        ScopeRiskConfigDispatchService dispatch =
+                new ScopeRiskConfigDispatchService(
+                        new InMemoryScopeGateOverrideStore(),
+                        scopeStore,
+                        store,
+                        noPublisher,
+                        emptyOutbox());
+        ScopeLimitParamsService scopeService =
+                new ScopeLimitParamsService(scopeStore, store, props, dutyAuth, dispatch);
         ObjectProvider<StringRedisTemplate> redis = new ObjectProvider<>() {
             @Override
             public StringRedisTemplate getObject() {
@@ -58,7 +98,13 @@ class FixtureLimitParamsServiceTest {
                 return null;
             }
         };
-        service = new FixtureLimitParamsService(matchRepository, store, scopeService, props, redis);
+        service = new FixtureLimitParamsService(
+                matchRepository, store, scopeService, props, dutyAuth, dispatch, redis);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -96,6 +142,30 @@ class FixtureLimitParamsServiceTest {
         assertTrue(service.resolve("germany-paraguay").overrideActive());
         service.clear("germany-paraguay");
         assertFalse(service.resolve("germany-paraguay").overrideActive());
+    }
+
+    private static ObjectProvider<ScopeRiskConfigOutbox> emptyOutbox() {
+        return new ObjectProvider<>() {
+            @Override
+            public ScopeRiskConfigOutbox getObject() {
+                return null;
+            }
+
+            @Override
+            public ScopeRiskConfigOutbox getObject(Object... args) {
+                return null;
+            }
+
+            @Override
+            public ScopeRiskConfigOutbox getIfAvailable() {
+                return null;
+            }
+
+            @Override
+            public ScopeRiskConfigOutbox getIfUnique() {
+                return null;
+            }
+        };
     }
 
     /** Minimal stub — avoids Mockito agent attachment in sandboxed CI. */

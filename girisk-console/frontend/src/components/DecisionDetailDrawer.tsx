@@ -1,6 +1,8 @@
 import { Descriptions, Drawer, Empty, Space, Typography } from 'antd';
 import { Link } from 'react-router-dom';
+import GateSummaryPanel from './GateSummaryPanel';
 import type { DecisionReason, DecisionVersions, RiskDecisionLog } from '../types';
+import { buildGateSummary } from '../utils/gateSummary';
 import { DecisionTag, LevelTag } from '../utils/tags';
 
 function parseJson<T>(raw: string | undefined | null, fallback: T): T {
@@ -32,11 +34,12 @@ export default function DecisionDetailDrawer({
   const versions = parseJson<DecisionVersions>(log.versionsJson, {});
   const snapshot = parseJson<Record<string, unknown>>(log.featureSnapshotJson, {});
   const market = parseJson<Record<string, unknown>>(log.marketJson, {});
+  const gateSummary = buildGateSummary(log);
 
   return (
     <Drawer
       title={`决策详情 · ${log.orderId}`}
-      width={640}
+      width={720}
       open={open}
       onClose={onClose}
       destroyOnClose
@@ -63,7 +66,12 @@ export default function DecisionDetailDrawer({
         <Descriptions.Item label="时间" span={2}>{log.createdAt}</Descriptions.Item>
       </Descriptions>
 
-      <Typography.Title level={5}>命中规则 / 闸门</Typography.Title>
+      <Typography.Title level={5}>闸门摘要</Typography.Title>
+      <div className="content-card" style={{ padding: 12, marginBottom: 16 }}>
+        <GateSummaryPanel summary={gateSummary} />
+      </div>
+
+      <Typography.Title level={5}>命中规则</Typography.Title>
       {reasons.length === 0 ? (
         <Empty description="无命中（PASS）" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ) : (

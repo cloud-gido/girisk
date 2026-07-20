@@ -60,6 +60,79 @@ export const sportsApi = {
       `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/limit-override`,
       { method: 'DELETE' },
     ),
+  getScopeTradingStatus: (scopeType: 'overall' | 'sport', scopeKey: string) =>
+    request<import('../types').ScopeTradingStatusSummary>(
+      `/sports/scopes/${scopeType}/${encodeURIComponent(scopeKey)}/status`,
+    ),
+  setScopeTradingStatus: (
+    scopeType: 'overall' | 'sport',
+    scopeKey: string,
+    status: 'ACTIVE' | 'SUSPENDED',
+  ) =>
+    request<import('../types').ScopeTradingStatusSummary>(
+      `/sports/scopes/${scopeType}/${encodeURIComponent(scopeKey)}/status`,
+      { method: 'POST', body: JSON.stringify({ status }) },
+    ),
+  getLeagueTradingStatus: (sportCode: string, leagueCode: string) =>
+    request<import('../types').ScopeTradingStatusSummary>(
+      `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/status`,
+    ),
+  setLeagueTradingStatus: (
+    sportCode: string,
+    leagueCode: string,
+    status: 'ACTIVE' | 'SUSPENDED',
+  ) =>
+    request<import('../types').ScopeTradingStatusSummary>(
+      `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/status`,
+      { method: 'POST', body: JSON.stringify({ status }) },
+    ),
+  getScopeGates: (scopeType: 'overall' | 'sport', scopeKey: string) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/${scopeType}/${encodeURIComponent(scopeKey)}/gates`,
+    ),
+  putScopeGates: (
+    scopeType: 'overall' | 'sport',
+    scopeKey: string,
+    body: import('../types').ScopeGateOverrideRequest,
+  ) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/${scopeType}/${encodeURIComponent(scopeKey)}/gates`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  clearScopeGates: (scopeType: 'overall' | 'sport', scopeKey: string) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/${scopeType}/${encodeURIComponent(scopeKey)}/gates`,
+      { method: 'DELETE' },
+    ),
+  getLeagueGates: (sportCode: string, leagueCode: string) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/gates`,
+    ),
+  putLeagueGates: (
+    sportCode: string,
+    leagueCode: string,
+    body: import('../types').ScopeGateOverrideRequest,
+  ) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/gates`,
+      { method: 'PUT', body: JSON.stringify(body) },
+    ),
+  clearLeagueGates: (sportCode: string, leagueCode: string) =>
+    request<import('../types').ScopeGateParamsView>(
+      `/sports/scopes/league/${encodeURIComponent(sportCode)}/${encodeURIComponent(leagueCode)}/gates`,
+      { method: 'DELETE' },
+    ),
+  getMatchGates: (matchCode: string) =>
+    request<import('../types').ScopeGateParamsView>(`/sports/matches/${encodeURIComponent(matchCode)}/gates`),
+  putMatchGates: (matchCode: string, body: import('../types').ScopeGateOverrideRequest) =>
+    request<import('../types').ScopeGateParamsView>(`/sports/matches/${encodeURIComponent(matchCode)}/gates`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  clearMatchGates: (matchCode: string) =>
+    request<import('../types').ScopeGateParamsView>(`/sports/matches/${encodeURIComponent(matchCode)}/gates`, {
+      method: 'DELETE',
+    }),
   betEvaluate: (body: Record<string, unknown>) =>
     request<import('../types').SportsBetEvaluateResponse>('/sports/bet/evaluate', {
       method: 'POST',

@@ -40,6 +40,7 @@ public final class KafkaFootballOrderCsvParser {
         o.orderId = require(parts[1], "订单号");
         o.orderTime = parts[2];
         o.userId = parts[3];
+        o.sportCode = "football";
         o.league = parts[4];
         o.homeTeam = parts[5];
         o.awayTeam = parts[6];

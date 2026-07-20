@@ -20,6 +20,10 @@ public class ExposureCheckScheduler {
     @Scheduled(cron = "${girisk.sports.exposure-check-cron:0 */5 * * * *}")
     public void checkAllMatches() {
         log.debug("Running scheduled sports exposure check");
-        exposureService.runExposureCheckForAll();
+        try {
+            exposureService.runExposureCheckForAll();
+        } catch (Exception e) {
+            log.warn("Scheduled exposure check skipped: {}", e.getMessage());
+        }
     }
 }

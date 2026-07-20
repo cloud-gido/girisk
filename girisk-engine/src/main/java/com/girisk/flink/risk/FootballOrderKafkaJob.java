@@ -15,13 +15,18 @@ import com.girisk.flink.risk.kafka.LiveScoreFixtureKeyFunction;
 import com.girisk.flink.risk.fixture.FixtureMetadataLookups;
 import com.girisk.flink.risk.kafka.KafkaTopicEnsurer;
 import com.girisk.flink.risk.kafka.RiskOrderIngress;
+import com.girisk.flink.risk.config.ScopeConfigEnrichFunction;
+import com.girisk.flink.risk.redis.RedisFixtureReplayStatsSink;
+import com.girisk.flink.risk.redis.RedisFixtureMarketGroupsSink;
 import com.girisk.flink.risk.redis.RedisFixtureViewSink;
 import com.girisk.flink.risk.model.EnrichedFootballOrder;
 import com.girisk.flink.risk.model.LiveMatchScore;
 import com.girisk.flink.risk.model.RiskOrderStreamEvent;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.streaming.api.datastream.BroadcastStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -32,13 +37,10 @@ import java.util.Locale;
 import java.util.Properties;
 
 /**
- * 足球订单作业：两个 Kafka topic。
+ * 足球订单作业。
  *
- * <ul>
- *   <li>{@code --sink.topic.detail}：明细，每笔订单 × 假设比分（schemaVersion=3）</li>
- *   <li>{@code --sink.topic.summary}：汇总，每场每次触发一条嵌套快照（schemaVersion=8，含 triggerOrder + assumedScores 全网格）</li>
- *   <li>{@code --sink.topic.business}：summary ∪ limit（union all，每条仅一侧有值）</li>
- * </ul>
+ * <p>默认只写 {@code girisk.decision.v1}（含 market / evidence / featureSnapshot 审计明细）。
+ * 旧四出口 detail / summary / limit / business 默认关闭，需显式 {@code --sink.topic.*} 才写出。
  *
  * <p>默认 {@code --bootstrap} 为开发 Kafka {@link KafkaBootstrapDefaults#DEV}（本机无 broker）。
  */
@@ -98,9 +100,15 @@ public final class FootballOrderKafkaJob {
         long cleanupDelayMs = cleanupHours * 3_600_000L;
         double limitDelta = t.getDouble("limit.delta", 0.2);
         // 冷启动虚拟种子（返彩口径，产品计算器默认 2000）
-        double seedPayoutYuan = t.getDouble("limit.initialSeedPayoutYuan", 2000.0);
+        // 兼容 --limit.seedPayoutYuan（文档/联调常用）与 --limit.initialSeedPayoutYuan
+        double seedPayoutYuan =
+                t.has("limit.seedPayoutYuan")
+                        ? t.getDouble("limit.seedPayoutYuan")
+                        : t.getDouble("limit.initialSeedPayoutYuan", 2000.0);
         // Gate 2 风险敞口阈值：最差净盈亏 < -该值 时建议拒单（产品示例 1000）
         double maxWorstLossYuan = t.getDouble("exposure.maxWorstLossYuan", 1000.0);
+        // Gate 0 单注返彩上限（元）；0=关闭，可由 girisk.config.v1 分层覆盖
+        double maxBetPayoutYuan = t.getDouble("limit.maxBetPayoutYuan", 0.0);
         boolean limitEnabled = t.getBoolean("limit.enabled", true);
         boolean liveScoreEnabled = t.getBoolean("live.score.enabled", true);
         String liveScoreTopic = t.get("live.score.topic", FootballOrderKafkaTopics.LIVE_SCORE).trim();
@@ -108,29 +116,23 @@ public final class FootballOrderKafkaJob {
         String liveScoreOffset = t.get("live.score.offset", offset);
 
         String sinkBootstrap = t.get("sink.bootstrap", bootstrap);
+        // 旧四出口默认空（不写 Kafka）；兼容：显式传入 --sink.topic.detail/summary/limit/business 仍可打开
         String expandTopic =
-                t.get("sink.topic.risk", t.get("sink.topic.detail", FootballOrderKafkaTopics.DETAIL))
-                        .trim();
+                t.get("sink.topic.risk", t.get("sink.topic.detail", "")).trim();
         String summaryTopic =
-                t.get(
-                                "sink.topic.summary",
-                                t.get("sink.topic.matrix", FootballOrderKafkaTopics.SUMMARY))
-                        .trim();
+                t.get("sink.topic.summary", t.get("sink.topic.matrix", "")).trim();
         String limitTopic =
-                limitEnabled
-                        ? t.get("sink.topic.limit", FootballOrderKafkaTopics.LIMIT).trim()
-                        : "";
-        boolean businessEnabled = limitEnabled && t.getBoolean("sink.business.enabled", true);
+                limitEnabled ? t.get("sink.topic.limit", "").trim() : "";
+        boolean businessEnabled = limitEnabled && t.getBoolean("sink.business.enabled", false);
         String businessTopic =
-                businessEnabled
-                        ? t.get("sink.topic.business", FootballOrderKafkaTopics.BUSINESS).trim()
-                        : "";
+                businessEnabled ? t.get("sink.topic.business", "").trim() : "";
         boolean decisionEnabled = t.getBoolean("sink.decision.enabled", true);
         String decisionTopic =
                 decisionEnabled
                         ? t.get("sink.topic.decision", FootballOrderKafkaTopics.DECISION).trim()
                         : "";
-        boolean redisViewEnabled = t.getBoolean("sink.redis.view.enabled", false);
+        // 默认开：订单 → decision.v1 + Redis 视图 → Console 决策页 / 敞口看板全流程
+        boolean redisViewEnabled = t.getBoolean("sink.redis.view.enabled", true);
         String redisHost = t.get("sink.redis.host", "127.0.0.1");
         int redisPort = t.getInt("sink.redis.port", 6379);
         String redisPassword = t.get("sink.redis.password", "");
@@ -144,9 +146,11 @@ public final class FootballOrderKafkaJob {
         RiskSnapshotEmitFlags snapshotEmitFlags =
                 new RiskSnapshotEmitFlags(
                         !summaryTopic.isEmpty() || summaryPrint || redisViewEnabled,
-                        !limitTopic.isEmpty() || limitPrint,
+                        // Redis 责任盘盘口明细依赖 limit side-output → marketGroups
+                        !limitTopic.isEmpty() || limitPrint || redisViewEnabled,
                         !businessTopic.isEmpty() || businessPrint,
-                        !decisionTopic.isEmpty() || decisionPrint);
+                        // Redis 汇总 12 格依赖 decision side-output 累加 replayStats
+                        !decisionTopic.isEmpty() || decisionPrint || redisViewEnabled);
         boolean needSnapshotPipeline =
                 snapshotEmitFlags.summary
                         || snapshotEmitFlags.limit
@@ -155,7 +159,7 @@ public final class FootballOrderKafkaJob {
 
         System.out.printf(
                 Locale.ROOT,
-                "[FootballOrderKafkaJob] bootstrap=%s pre=%s post=%s postFeedback=%s liveScore=%s(fallback=%d:%d grid=%d) detail=%s summary=%s limit=%s business=%s seedPayoutYuan=%s worstLossYuan=%s offset.pre=%s%n",
+                "[FootballOrderKafkaJob] bootstrap=%s pre=%s post=%s postFeedback=%s liveScore=%s(fallback=%d:%d grid=%d) decision=%s redisView=%s legacy[detail=%s summary=%s limit=%s business=%s] seed=%s maxBet=%s worstLoss=%s offset.pre=%s%n",
                 bootstrap,
                 preTopic,
                 postFeedbackEnabled ? postTopic : "disabled",
@@ -164,11 +168,14 @@ public final class FootballOrderKafkaJob {
                 gridParams.baseHome,
                 gridParams.baseAway,
                 gridParams.grid.homeSpan(),
-                expandTopic,
-                summaryTopic,
-                limitTopic,
-                businessTopic,
+                decisionTopic.isEmpty() ? "disabled" : decisionTopic,
+                redisViewEnabled ? (redisHost + ":" + redisPort) : "disabled",
+                expandTopic.isEmpty() ? "-" : expandTopic,
+                summaryTopic.isEmpty() ? "-" : summaryTopic,
+                limitTopic.isEmpty() ? "-" : limitTopic,
+                businessTopic.isEmpty() ? "-" : businessTopic,
                 seedPayoutYuan,
+                maxBetPayoutYuan,
                 maxWorstLossYuan,
                 offset);
         if (t.has("fixture.dim.file")) {
@@ -263,10 +270,56 @@ public final class FootballOrderKafkaJob {
         }
 
         if (needSnapshotPipeline) {
+            boolean configEnabled = t.getBoolean("config.enabled", true);
+            String configTopic =
+                    t.get("source.topic.config", FootballOrderKafkaTopics.CONFIG).trim();
+            String configGroupId = t.get("config.group.id", groupId + "-config");
+            DataStream<RiskOrderStreamEvent> configuredRiskEvents = riskEvents;
+            if (configEnabled && !configTopic.isEmpty()) {
+                KafkaSource<String> configSource =
+                        KafkaSource.<String>builder()
+                                .setBootstrapServers(bootstrap)
+                                .setTopics(configTopic)
+                                .setGroupId(configGroupId)
+                                .setStartingOffsets(OffsetsInitializer.earliest())
+                                .setValueOnlyDeserializer(new SimpleStringSchema())
+                                .setProperties(kafkaProps)
+                                .build();
+                DataStream<String> configRaw =
+                        env.fromSource(
+                                        configSource,
+                                        WatermarkStrategy.noWatermarks(),
+                                        "kafka-risk-config")
+                                .uid("kafka-risk-config-source")
+                                .name("kafka-risk-config-source");
+                MapStateDescriptor<String, com.girisk.flink.risk.config.ScopeRiskConfigLayer>
+                        configDesc = ScopeConfigEnrichFunction.CONFIG_STATE_DESC;
+                BroadcastStream<String> configBroadcast = configRaw.broadcast(configDesc);
+                configuredRiskEvents =
+                        riskEvents
+                                .keyBy(RiskOrderStreamEvent::fixtureIdForKey)
+                                .connect(configBroadcast)
+                                .process(
+                                        new ScopeConfigEnrichFunction(
+                                                limitDelta,
+                                                seedPayoutYuan,
+                                                maxWorstLossYuan,
+                                                maxBetPayoutYuan))
+                                .uid("scope-config-enrich")
+                                .name("scope-config-enrich");
+                System.out.println(
+                        "[FootballOrderKafkaJob] config.v1 enabled topic="
+                                + configTopic
+                                + " group="
+                                + configGroupId);
+            } else {
+                System.out.println("[FootballOrderKafkaJob] config.enabled=false，仅用 CLI 限额参数");
+            }
+
             SingleOutputStreamOperator<String> summary;
             if (liveScores != null) {
                 summary =
-                        riskEvents
+                        configuredRiskEvents
                                 .keyBy(RiskOrderStreamEvent::fixtureIdForKey)
                                 .connect(liveScores.keyBy(LiveMatchScore::getFixtureIdForKey))
                                 .process(
@@ -283,7 +336,7 @@ public final class FootballOrderKafkaJob {
                                 .name("match-exposure-summary-json-live");
             } else {
                 summary =
-                        riskEvents
+                        configuredRiskEvents
                                 .keyBy(
                                         postFeedbackEnabled
                                                 ? RiskOrderStreamEvent::fixtureIdForKey
@@ -321,6 +374,10 @@ public final class FootballOrderKafkaJob {
             if (limitPrint) {
                 limits.print("MatchLimit");
             }
+            if (redisViewEnabled) {
+                limits.addSink(new RedisFixtureMarketGroupsSink(redisHost, redisPort, redisPassword))
+                        .name("redis-fixture-market-groups-sink");
+            }
 
             DataStream<String> business =
                     summary.getSideOutput(MatchExposureKafkaProcessFunction.BUSINESS_SNAPSHOT_TAG);
@@ -345,6 +402,11 @@ public final class FootballOrderKafkaJob {
             }
             if (decisionPrint) {
                 decisions.print("RiskDecision");
+            }
+            if (redisViewEnabled) {
+                decisions
+                        .addSink(new RedisFixtureReplayStatsSink(redisHost, redisPort, redisPassword))
+                        .name("redis-fixture-replay-stats-sink");
             }
         }
 

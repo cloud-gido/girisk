@@ -178,7 +178,7 @@ public class RiskEngineService {
                 requestId, null, request.merchantId(), null,
                 request.amount() != null ? request.amount().multiply(BigDecimal.valueOf(100)).longValue() : null,
                 null, null, null,
-                reasonsJson, versionsJson, featureSnapshotJson, LocalDateTime.now());
+                reasonsJson, versionsJson, featureSnapshotJson, null, LocalDateTime.now());
         long logId = decisionLogRepository.insert(log);
 
         String caseNo = null;

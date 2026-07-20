@@ -3,6 +3,7 @@ package com.girisk.flink.risk.kafka;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.girisk.flink.risk.grid.MatchExposureAggregator;
 import com.girisk.flink.risk.grid.MatchExposureAggregator.ExposureSummary;
 import com.girisk.flink.risk.grid.MatchExposureAggregator.ScenarioExposure;
 import com.girisk.flink.risk.grid.ScoreGridParams;
@@ -30,6 +31,34 @@ public final class MatchExposureSummaryJson {
             boolean eventTimeOutOfOrder,
             int windowOrderCount,
             ExposureSummary exposure,
+            ScoreGridParams gridParams,
+            long publishedAtMs) {
+        return summarySnapshotJson(
+                trigger,
+                matchKey,
+                duplicateIgnored,
+                triggerRejected,
+                eventTimeOutOfOrder,
+                windowOrderCount,
+                exposure,
+                null,
+                gridParams,
+                publishedAtMs);
+    }
+
+    /**
+     * @param noRiskExposure 若提供：按「本场全部已见订单（含被拒）」汇总的对照敞口，写入
+     *     {@code noRiskWorstPnlYuan}/{@code noRiskWorstScore}
+     */
+    public static String summarySnapshotJson(
+            EnrichedFootballOrder trigger,
+            String matchKey,
+            boolean duplicateIgnored,
+            boolean triggerRejected,
+            boolean eventTimeOutOfOrder,
+            int windowOrderCount,
+            ExposureSummary exposure,
+            ExposureSummary noRiskExposure,
             ScoreGridParams gridParams,
             long publishedAtMs) {
         MaxProfitMeta maxProfit = maxProfitMeta(exposure.scenarios);
@@ -78,6 +107,14 @@ public final class MatchExposureSummaryJson {
             ArrayNode scores = MAPPER.createArrayNode();
             maxProfit.tiedScores.forEach(scores::add);
             n.set("maxProfitScores", scores);
+        }
+
+        if (noRiskExposure != null) {
+            ScenarioExposure noRiskWorst = MatchExposureAggregator.worstScenario(noRiskExposure);
+            if (noRiskWorst != null) {
+                n.put("noRiskWorstPnlYuan", noRiskWorst.bookmakerPnlCents / 100.0);
+                n.put("noRiskWorstScore", noRiskWorst.scenario.scoreLabel());
+            }
         }
 
         ArrayNode assumed = MAPPER.createArrayNode();

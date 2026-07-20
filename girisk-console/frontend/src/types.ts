@@ -9,6 +9,8 @@ export interface FixtureReplayStats {
   rejectedLimit?: number;
   rejectedExposure?: number;
   rejectedTotal?: number;
+  /** 重复订单（decision PASS 但 evidence.duplicateIgnored） */
+  duplicateCount?: number;
   totalOrders?: number;
   acceptedStakeYuan?: number;
   noRiskWorstPnlYuan?: number;
@@ -35,6 +37,11 @@ export interface RiskFixtureView {
   riskLevel: string;
   updatedAt: string;
   replayStats?: FixtureReplayStats | null;
+  /** Flink Gate1 盘口快照（与责任盘同源） */
+  marketGroups?: MarketGroupView[] | null;
+  limitDelta?: number | null;
+  initialSeedPayoutYuan?: number | null;
+  marketGroupsUpdatedAt?: number | null;
 }
 
 export interface DashboardOverview {
@@ -160,6 +167,33 @@ export interface DecisionVersions {
   engineBuild?: string;
 }
 
+export interface DecisionGateSummary {
+  rejectReason?: string;
+  limitRejected?: boolean;
+  exposureRejected?: boolean;
+  gate1?: {
+    selectionLabel?: string;
+    groupKey?: string;
+    proposedPayoutYuan?: number;
+    stakeBeforeYuan?: number;
+    targetAmountYuan?: number;
+    maxAllowedYuan?: number;
+    acceptMaxYuan?: number;
+    limitDelta?: number;
+    seedPayoutYuan?: number;
+    overLimitBefore?: boolean;
+  };
+  gate2?: {
+    trialWorstLossYuan?: number;
+    maxWorstLossYuan?: number;
+    worstScore?: string;
+    beforeWorstPnlYuan?: number;
+    trialWorstPnlYuan?: number;
+    afterWorstPnlYuan?: number;
+    exceeded?: boolean;
+  };
+}
+
 export interface RiskDecisionLog {
   id: number;
   requestId: string;
@@ -188,6 +222,7 @@ export interface RiskDecisionLog {
   reasonsJson?: string;
   versionsJson?: string;
   featureSnapshotJson?: string;
+  evidenceJson?: string;
   createdAt: string;
 }
 
@@ -241,11 +276,15 @@ export interface DecisionReplay {
   reasons: DecisionReason[];
   versions: DecisionVersions;
   featureSnapshot: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
+  gateSummary?: DecisionGateSummary;
   market: Record<string, unknown>;
   case?: RiskCase;
   events?: RiskEvent[];
   configRelease?: RiskConfigRelease;
   explainable: boolean;
+  /** doris = Kafka 原样审计；postgres = Console 运营库回退 */
+  auditSource?: 'doris' | 'postgres' | 'mysql';
 }
 
 export interface StreamStatus {
@@ -360,6 +399,46 @@ export interface ScopeLimitParamsView {
   overrideMaxBetPayoutYuan?: number | null;
   updatedBy?: string;
   updatedAt?: string;
+}
+
+/** 总体 / 球类 / 联赛批量停盘汇总 */
+export interface ScopeTradingStatusSummary {
+  scopeType: string;
+  scopeKey: string;
+  matchCount: number;
+  suspendedCount: number;
+  activeCount: number;
+  status?: 'ACTIVE' | 'SUSPENDED';
+  updated?: number;
+}
+
+/** 总开关 / 限额开关 / 敞口开关（继承：单赛事 > 联赛 > 球类 > 默认） */
+export interface ScopeGateParamsView {
+  scopeType: string;
+  scopeKey: string;
+  tradingEnabled: boolean;
+  limitGateEnabled: boolean;
+  exposureGateEnabled: boolean;
+  tradingSource: string;
+  limitGateSource: string;
+  exposureGateSource: string;
+  overrideActive: boolean;
+  overrideTradingEnabled?: boolean | null;
+  overrideLimitGateEnabled?: boolean | null;
+  overrideExposureGateEnabled?: boolean | null;
+  inheritedTradingEnabled: boolean;
+  inheritedLimitGateEnabled: boolean;
+  inheritedExposureGateEnabled: boolean;
+  canWrite: boolean;
+  updatedBy?: string;
+  updatedAt?: string;
+}
+
+export interface ScopeGateOverrideRequest {
+  tradingEnabled?: boolean | null;
+  limitGateEnabled?: boolean | null;
+  exposureGateEnabled?: boolean | null;
+  operatorId?: string;
 }
 
 export interface OutcomeLimitRow {

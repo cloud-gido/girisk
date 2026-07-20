@@ -145,7 +145,7 @@ export default function SportsBetPage() {
     <>
       <div className="page-header">
         <h2>调试沙箱</h2>
-        <p>体育投注：统一决策核 + 返彩限额 / 预占；与订单试算共用内核、场景不同</p>
+        <p>体育投注试算：统一决策核 + 返彩限额 / 预占；责任盘请看实时监控 · 敞口看板</p>
       </div>
       <SandboxTabs />
       <Row gutter={16}>
@@ -228,7 +228,7 @@ export default function SportsBetPage() {
               />
             </Card>
           )}
-          <Card className="content-card" title="最近决策审计" style={{ marginTop: 16 }}>
+          <Card className="content-card" title="最近试算结果" style={{ marginTop: 16 }}>
             <Table
               size="small"
               rowKey="id"

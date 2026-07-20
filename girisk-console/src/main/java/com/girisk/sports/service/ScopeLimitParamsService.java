@@ -29,14 +29,20 @@ public class ScopeLimitParamsService {
     private final ScopeLimitOverrideStore scopeStore;
     private final FixtureLimitOverrideStore fixtureStore;
     private final SportsRiskProperties props;
+    private final ScopeDutyAuth dutyAuth;
+    private final ScopeRiskConfigDispatchService configDispatch;
 
     public ScopeLimitParamsService(
             ScopeLimitOverrideStore scopeStore,
             FixtureLimitOverrideStore fixtureStore,
-            SportsRiskProperties props) {
+            SportsRiskProperties props,
+            ScopeDutyAuth dutyAuth,
+            ScopeRiskConfigDispatchService configDispatch) {
         this.scopeStore = scopeStore;
         this.fixtureStore = fixtureStore;
         this.props = props;
+        this.dutyAuth = dutyAuth;
+        this.configDispatch = configDispatch;
     }
 
     public ScopeLimitParamsView getView(LimitScopeType type, String scopeKey) {
@@ -54,6 +60,7 @@ public class ScopeLimitParamsService {
         if (type == LimitScopeType.MATCH) {
             throw new BusinessException("赛事请使用 /matches/{code}/limit-override");
         }
+        dutyAuth.requireWrite(type);
         if (req == null) {
             throw new BusinessException("请求体不能为空");
         }
@@ -75,6 +82,7 @@ public class ScopeLimitParamsService {
             scopeStore.put(next);
             log.info("Saved scope limit override {}/{} by={}", type, key, next.updatedBy());
         }
+        configDispatch.afterScopeWrite(type, key);
         return getView(type, key);
     }
 
@@ -82,8 +90,10 @@ public class ScopeLimitParamsService {
         if (type == LimitScopeType.MATCH) {
             throw new BusinessException("赛事请使用 /matches/{code}/limit-override");
         }
+        dutyAuth.requireWrite(type);
         String key = normalizeKey(type, scopeKey);
         scopeStore.delete(type, key);
+        configDispatch.afterScopeWrite(type, key);
         return getView(type, key);
     }
 

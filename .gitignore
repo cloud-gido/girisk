@@ -23,3 +23,6 @@ credentials.json
 **/application-local-secret.yml
 deploy/flink/prod/*-secret.yaml
 !deploy/flink/prod/*-secret.yaml.example
+
+# accidental jar xf debris
+/com/

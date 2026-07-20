@@ -11,7 +11,8 @@ A clear description of what is wrong.
 ## Component
 
 - [ ] girisk-console
-- [ ] girisk-engine
+- [ ] girisk-common (contract)
+- [ ] girisk-engine (internal; do not discuss proprietary details on public GitHub)
 - [ ] girisk-common / contracts
 - [ ] docs / scripts
 

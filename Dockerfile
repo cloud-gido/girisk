@@ -1,9 +1,53 @@
-FROM eclipse-temurin:21-jre-alpine
+# 兼容入口：与 deploy/Dockerfile.console 相同（compose `build: .` / 旧文档）
+# 推荐显式使用: docker build -f deploy/Dockerfile.console -t girisk-console:local .
+# CI 推送 GHCR 见 .github/workflows/docker-publish.yml
+
+ARG NODE_IMAGE=node:20-alpine
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
+ARG JRE_IMAGE=eclipse-temurin:21-jre-alpine
+
+FROM ${NODE_IMAGE} AS frontend
+WORKDIR /fe
+RUN npm config set registry https://registry.npmmirror.com
+COPY girisk-console/frontend/package.json girisk-console/frontend/package-lock.json* ./
+RUN npm ci
+COPY girisk-console/frontend/ ./
+RUN npm run build
+
+FROM ${MAVEN_IMAGE} AS build
+WORKDIR /src
+COPY deploy/maven/settings.xml /root/.m2/settings.xml
+COPY pom.xml ./
+COPY girisk-common/pom.xml girisk-common/pom.xml
+COPY girisk-console/pom.xml girisk-console/pom.xml
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-console -am dependency:go-offline -DskipTests && break; \
+      echo "[console-build] dependency retry $i..."; sleep 5; \
+    done || true
+
+COPY girisk-common/ girisk-common/
+COPY girisk-console/ girisk-console/
+COPY --from=frontend /fe/dist /src/girisk-console/frontend/dist
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-console -am package -DskipTests && exit 0; \
+      echo "[console-build] package retry $i..."; sleep 5; \
+    done; \
+    exit 1
+
+FROM ${JRE_IMAGE}
 WORKDIR /app
-ENV SERVER_PORT=18088
-EXPOSE 18088
 
-# 由宿主机 mvn -pl girisk-console -am package 预构建（./start.sh --docker）
-COPY target/girisk-console-1.0.0.jar app.jar
+RUN apk add --no-cache wget \
+    && addgroup -S girisk && adduser -S girisk -G girisk \
+    && chown -R girisk:girisk /app
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+COPY --from=build /src/girisk-console/target/girisk-console-1.0.0.jar /app/app.jar
+USER girisk
+
+ENV SERVER_PORT=8080
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -q -O- http://127.0.0.1:8080/login >/dev/null || exit 1
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

@@ -77,6 +77,66 @@ public class SportsMatchRepository {
                 status, matchCode);
     }
 
+    /** 批量：全平台 */
+    public int updateStatusAll(String status) {
+        return jdbc.update(
+                "UPDATE sports_match SET status = ?, updated_at = CURRENT_TIMESTAMP",
+                status);
+    }
+
+    /** 批量：球类 */
+    public int updateStatusBySport(String sportCode, String status) {
+        return jdbc.update(
+                "UPDATE sports_match SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE sport_code = ?",
+                status, sportCode);
+    }
+
+    /** 批量：联赛 */
+    public int updateStatusByLeague(String sportCode, String leagueCode, String status) {
+        return jdbc.update(
+                """
+                UPDATE sports_match SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE sport_code = ? AND league_code = ?
+                """,
+                status, sportCode, leagueCode);
+    }
+
+    public int countByStatus(String sportCode, String leagueCode, String status) {
+        if (sportCode != null && leagueCode != null) {
+            Integer n = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM sports_match WHERE sport_code = ? AND league_code = ? AND status = ?",
+                    Integer.class, sportCode, leagueCode, status);
+            return n == null ? 0 : n;
+        }
+        if (sportCode != null) {
+            Integer n = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM sports_match WHERE sport_code = ? AND status = ?",
+                    Integer.class, sportCode, status);
+            return n == null ? 0 : n;
+        }
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM sports_match WHERE status = ?",
+                Integer.class, status);
+        return n == null ? 0 : n;
+    }
+
+    public int countAll(String sportCode, String leagueCode) {
+        if (sportCode != null && leagueCode != null) {
+            Integer n = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM sports_match WHERE sport_code = ? AND league_code = ?",
+                    Integer.class, sportCode, leagueCode);
+            return n == null ? 0 : n;
+        }
+        if (sportCode != null) {
+            Integer n = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM sports_match WHERE sport_code = ?",
+                    Integer.class, sportCode);
+            return n == null ? 0 : n;
+        }
+        Integer n = jdbc.queryForObject("SELECT COUNT(*) FROM sports_match", Integer.class);
+        return n == null ? 0 : n;
+    }
+
     public long insert(String matchCode, String home, String away, BigDecimal threshold, BigDecimal delta) {
         return insert(matchCode, home, away, "football", "UNKNOWN", "未分组联赛", threshold, delta);
     }

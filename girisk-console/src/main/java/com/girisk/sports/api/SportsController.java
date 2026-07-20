@@ -15,15 +15,21 @@ import com.girisk.sports.model.SportsBetLog;
 import com.girisk.sports.model.SportsMatch;
 import com.girisk.sports.repository.SportsBetLogRepository;
 import com.girisk.sports.repository.SportsMatchRepository;
+import com.girisk.sports.dto.ScopeGateOverrideRequest;
+import com.girisk.sports.dto.ScopeGateParamsView;
 import com.girisk.sports.dto.ScopeLimitParamsView;
 import com.girisk.sports.model.LimitScopeType;
 import com.girisk.sports.model.ScopeLimitOverride;
 import com.girisk.sports.service.ExposureDemoBootstrapService;
 import com.girisk.sports.service.FixtureLimitParamsService;
+import com.girisk.sports.service.ScopeDutyAuth;
+import com.girisk.sports.service.ScopeGateService;
 import com.girisk.sports.service.ScopeLimitParamsService;
+import com.girisk.sports.service.ScopeRiskConfigBootstrapSync;
 import com.girisk.sports.service.SportsExposureService;
 import com.girisk.sports.service.SportsMatchStatusService;
 import com.girisk.sports.service.SportsReplaySeedService;
+import org.springframework.beans.factory.ObjectProvider;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,10 +46,13 @@ public class SportsController {
     private final SportsReplaySeedService replaySeedService;
     private final FixtureLimitParamsService limitParamsService;
     private final ScopeLimitParamsService scopeLimitParamsService;
+    private final ScopeGateService scopeGateService;
     private final ExposureDemoBootstrapService demoBootstrapService;
     private final SportsMatchStatusService matchStatusService;
     private final SportsBetLogRepository betLogRepository;
     private final SportsMatchRepository matchRepository;
+    private final ScopeDutyAuth dutyAuth;
+    private final ScopeRiskConfigBootstrapSync configBootstrapSync;
 
     public SportsController(
             RiskDecisionGateway gateway,
@@ -51,19 +60,25 @@ public class SportsController {
             SportsReplaySeedService replaySeedService,
             FixtureLimitParamsService limitParamsService,
             ScopeLimitParamsService scopeLimitParamsService,
+            ScopeGateService scopeGateService,
             ExposureDemoBootstrapService demoBootstrapService,
             SportsMatchStatusService matchStatusService,
             SportsBetLogRepository betLogRepository,
-            SportsMatchRepository matchRepository) {
+            SportsMatchRepository matchRepository,
+            ScopeDutyAuth dutyAuth,
+            ObjectProvider<ScopeRiskConfigBootstrapSync> configBootstrapSync) {
         this.gateway = gateway;
         this.exposureService = exposureService;
         this.replaySeedService = replaySeedService;
         this.limitParamsService = limitParamsService;
         this.scopeLimitParamsService = scopeLimitParamsService;
+        this.scopeGateService = scopeGateService;
         this.demoBootstrapService = demoBootstrapService;
         this.matchStatusService = matchStatusService;
         this.betLogRepository = betLogRepository;
         this.matchRepository = matchRepository;
+        this.dutyAuth = dutyAuth;
+        this.configBootstrapSync = configBootstrapSync.getIfAvailable();
     }
 
     /**
@@ -201,6 +216,87 @@ public class SportsController {
                 LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode)));
     }
 
+    /**
+     * 层级门控：总开关 / 限额开关 / 敞口开关。
+     * 继承：MATCH &gt; LEAGUE &gt; SPORT &gt; OVERALL &gt; 默认全开。
+     */
+    @GetMapping("/scopes/{scopeType}/{scopeKey}/gates")
+    public ApiResponse<ScopeGateParamsView> getScopeGates(
+            @PathVariable String scopeType,
+            @PathVariable String scopeKey) {
+        return ApiResponse.ok(scopeGateService.getView(LimitScopeType.from(scopeType), scopeKey));
+    }
+
+    @PutMapping("/scopes/{scopeType}/{scopeKey}/gates")
+    public ApiResponse<ScopeGateParamsView> putScopeGates(
+            @PathVariable String scopeType,
+            @PathVariable String scopeKey,
+            @RequestBody ScopeGateOverrideRequest body) {
+        return ApiResponse.ok(scopeGateService.upsert(LimitScopeType.from(scopeType), scopeKey, body));
+    }
+
+    @DeleteMapping("/scopes/{scopeType}/{scopeKey}/gates")
+    public ApiResponse<ScopeGateParamsView> clearScopeGates(
+            @PathVariable String scopeType,
+            @PathVariable String scopeKey) {
+        return ApiResponse.ok(scopeGateService.clear(LimitScopeType.from(scopeType), scopeKey));
+    }
+
+    @GetMapping("/scopes/league/{sportCode}/{leagueCode}/gates")
+    public ApiResponse<ScopeGateParamsView> getLeagueGates(
+            @PathVariable String sportCode,
+            @PathVariable String leagueCode) {
+        return ApiResponse.ok(scopeGateService.getView(
+                LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode)));
+    }
+
+    @PutMapping("/scopes/league/{sportCode}/{leagueCode}/gates")
+    public ApiResponse<ScopeGateParamsView> putLeagueGates(
+            @PathVariable String sportCode,
+            @PathVariable String leagueCode,
+            @RequestBody ScopeGateOverrideRequest body) {
+        return ApiResponse.ok(scopeGateService.upsert(
+                LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode), body));
+    }
+
+    @DeleteMapping("/scopes/league/{sportCode}/{leagueCode}/gates")
+    public ApiResponse<ScopeGateParamsView> clearLeagueGates(
+            @PathVariable String sportCode,
+            @PathVariable String leagueCode) {
+        return ApiResponse.ok(scopeGateService.clear(
+                LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode)));
+    }
+
+    @GetMapping("/matches/{matchCode}/gates")
+    public ApiResponse<ScopeGateParamsView> getMatchGates(@PathVariable String matchCode) {
+        return ApiResponse.ok(scopeGateService.getMatchView(matchCode));
+    }
+
+    @PutMapping("/matches/{matchCode}/gates")
+    public ApiResponse<ScopeGateParamsView> putMatchGates(
+            @PathVariable String matchCode,
+            @RequestBody ScopeGateOverrideRequest body) {
+        return ApiResponse.ok(scopeGateService.upsert(LimitScopeType.MATCH, matchCode, body));
+    }
+
+    @DeleteMapping("/matches/{matchCode}/gates")
+    public ApiResponse<ScopeGateParamsView> clearMatchGates(@PathVariable String matchCode) {
+        return ApiResponse.ok(scopeGateService.clear(LimitScopeType.MATCH, matchCode));
+    }
+
+    /**
+     * 运维：把 Redis 全部值班覆盖重刷到 {@code girisk.config.v1}（修复漂移）。
+     * 仅 ADMIN。
+     */
+    @PostMapping("/scopes/config-sync")
+    public ApiResponse<Map<String, Object>> syncConfigToKafka() {
+        dutyAuth.requireWrite(LimitScopeType.OVERALL);
+        if (configBootstrapSync == null) {
+            return ApiResponse.fail("Kafka 未启用，无法同步");
+        }
+        return ApiResponse.ok(configBootstrapSync.syncAll());
+    }
+
     @PostMapping("/matches")
     public ApiResponse<Map<String, Object>> createMatch(@RequestBody Map<String, Object> body) {
         String code = String.valueOf(body.get("matchCode"));
@@ -244,6 +340,43 @@ public class SportsController {
             @RequestBody Map<String, String> body) {
         String status = body != null ? body.get("status") : null;
         return ApiResponse.ok(matchStatusService.setStatus(matchCode, status));
+    }
+
+    /** 层级批量停盘/开盘：overall | sport | league（写入该层下全部赛事 status）。 */
+    @GetMapping("/scopes/{scopeType}/{scopeKey}/status")
+    public ApiResponse<Map<String, Object>> getScopeTradingStatus(
+            @PathVariable String scopeType,
+            @PathVariable String scopeKey) {
+        return ApiResponse.ok(matchStatusService.scopeStatusSummary(
+                LimitScopeType.from(scopeType), scopeKey));
+    }
+
+    @PostMapping("/scopes/{scopeType}/{scopeKey}/status")
+    public ApiResponse<Map<String, Object>> setScopeTradingStatus(
+            @PathVariable String scopeType,
+            @PathVariable String scopeKey,
+            @RequestBody Map<String, String> body) {
+        String status = body != null ? body.get("status") : null;
+        return ApiResponse.ok(matchStatusService.setScopeStatus(
+                LimitScopeType.from(scopeType), scopeKey, status));
+    }
+
+    @GetMapping("/scopes/league/{sportCode}/{leagueCode}/status")
+    public ApiResponse<Map<String, Object>> getLeagueTradingStatus(
+            @PathVariable String sportCode,
+            @PathVariable String leagueCode) {
+        return ApiResponse.ok(matchStatusService.scopeStatusSummary(
+                LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode)));
+    }
+
+    @PostMapping("/scopes/league/{sportCode}/{leagueCode}/status")
+    public ApiResponse<Map<String, Object>> setLeagueTradingStatus(
+            @PathVariable String sportCode,
+            @PathVariable String leagueCode,
+            @RequestBody Map<String, String> body) {
+        String status = body != null ? body.get("status") : null;
+        return ApiResponse.ok(matchStatusService.setScopeStatus(
+                LimitScopeType.LEAGUE, ScopeLimitOverride.leagueKey(sportCode, leagueCode), status));
     }
 
     @GetMapping("/bets")

@@ -145,6 +145,7 @@ export default function DashboardPage() {
               <Col span={12}><Statistic title="审核中" value={data?.reviewCount} /></Col>
               <Col span={12}>
                 <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => navigate('/girisk/config')}>配置中心</Tag>
+                <Tag color="cyan" style={{ cursor: 'pointer', marginLeft: 8 }} onClick={() => navigate('/girisk/decisions')}>决策中心</Tag>
                 <Tag color="purple" style={{ cursor: 'pointer', marginLeft: 8 }} onClick={() => navigate('/girisk/replay')}>风险回放</Tag>
               </Col>
             </Row>

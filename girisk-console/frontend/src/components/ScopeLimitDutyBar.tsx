@@ -1,4 +1,4 @@
-import { Button, Card, Col, Form, InputNumber, Row, Space, Typography, message } from 'antd';
+import { Button, Col, Collapse, Form, InputNumber, Row, Space, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { sportsApi } from '../api/sportsClient';
 import type { FixtureLimitOverrideRequest, ScopeLimitParamsView } from '../types';
@@ -13,6 +13,8 @@ type Props = {
   matchCode?: string;
   /** match 模式也可直接用已有 put/clear */
   onSaved?: () => void;
+  /** 默认展开 */
+  defaultOpen?: boolean;
 };
 
 export default function ScopeLimitDutyBar({
@@ -23,6 +25,7 @@ export default function ScopeLimitDutyBar({
   leagueCode,
   matchCode,
   onSaved,
+  defaultOpen = false,
 }: Props) {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -157,49 +160,67 @@ export default function ScopeLimitDutyBar({
   };
 
   return (
-    <Card
-      size="small"
-      title={title}
-      style={{ marginBottom: 16, background: 'var(--ant-color-fill-quaternary, #fafafa)' }}
-      extra={
-        <Space>
-          <Button size="small" danger disabled={saving || !matchOverrideActive} onClick={clear}>
-            清除本层覆盖
-          </Button>
-          <Button size="small" type="primary" loading={saving} onClick={save}>
-            立即生效
-          </Button>
-        </Space>
-      }
-    >
-      <Typography.Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
-        {hint || '仅改本层；下级未单独覆盖时继承本层。优先级：赛事 > 联赛 > 球类 > 总体 > 全局默认。'}
-        {view?.overrideActive ? ' · 本层已覆盖' : ' · 本层未覆盖（显示继承值）'}
-      </Typography.Paragraph>
-      <Form form={form} layout="vertical">
-        <Row gutter={16}>
-          <Col xs={24} sm={12} md={6}>
-            <Form.Item name="delta" label="等比例 δ" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
-              <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Form.Item name="seedPayoutYuan" label="冷启动种子（返彩元）" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
-              <InputNumber min={0} step={100} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Form.Item name="maxWorstLossYuan" label="最差亏损阈值（元）" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
-              <InputNumber min={0} step={1000} style={{ width: '100%' }} />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
-            <Form.Item name="maxBetPayoutYuan" label="单注返彩上限（元）" extra="空或 0 = 不启用" style={{ marginBottom: 8 }}>
-              <InputNumber min={0} step={100} style={{ width: '100%' }} placeholder="未启用" />
-            </Form.Item>
-          </Col>
-        </Row>
-      </Form>
-    </Card>
+    <Collapse
+      className="liability-duty-module"
+      bordered={false}
+      defaultActiveKey={defaultOpen ? ['limits'] : []}
+      items={[{
+        key: 'limits',
+        label: (
+          <span className="liability-duty-module-label">
+            {title}
+            {view ? (
+              <Typography.Text type="secondary" style={{ marginLeft: 8, fontWeight: 400 }}>
+                {view.overrideActive ? '本层已覆盖' : '继承中'}
+                {' · '}
+                δ={Number(view.delta)}
+              </Typography.Text>
+            ) : null}
+          </span>
+        ),
+        extra: (
+          <Space onClick={(e) => e.stopPropagation()}>
+            <Button size="small" danger disabled={saving || !matchOverrideActive} onClick={clear}>
+              清除本层覆盖
+            </Button>
+            <Button size="small" type="primary" loading={saving} onClick={save}>
+              立即生效
+            </Button>
+          </Space>
+        ),
+        children: (
+          <>
+            <Typography.Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 12, fontSize: 12 }}>
+              {hint || '仅改本层；下级未单独覆盖时继承本层。优先级：单赛事 > 联赛 > 球类 > 默认。'}
+              {view?.overrideActive ? ' · 本层已覆盖' : ' · 本层未覆盖（显示继承值）'}
+            </Typography.Paragraph>
+            <Form form={form} layout="vertical">
+              <Row gutter={16}>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item name="delta" label="等比例 δ" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
+                    <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item name="seedPayoutYuan" label="冷启动种子（返彩元）" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
+                    <InputNumber min={0} step={100} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item name="maxWorstLossYuan" label="最差亏损阈值（元）" rules={[{ required: true }]} style={{ marginBottom: 8 }}>
+                    <InputNumber min={0} step={1000} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item name="maxBetPayoutYuan" label="单注返彩上限（元）" extra="空或 0 = 不启用" style={{ marginBottom: 8 }}>
+                    <InputNumber min={0} step={100} style={{ width: '100%' }} placeholder="未启用" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Form>
+          </>
+        ),
+      }]}
+    />
   );
 }

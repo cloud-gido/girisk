@@ -10,7 +10,6 @@ import {
   HistoryOutlined,
   ProfileOutlined,
   RadarChartOutlined,
-  SafetyCertificateOutlined,
   SettingOutlined,
   ThunderboltOutlined,
   UnorderedListOutlined,
@@ -28,9 +27,7 @@ export const RISK_NAVIGATION: NavEntry[] = [
     icon: <RadarChartOutlined />,
     children: [
       { key: '/girisk/exposure', label: '敞口看板', icon: <FundProjectionScreenOutlined /> },
-      { key: '/girisk/stream', label: '流量监控', icon: <CloudSyncOutlined /> },
-      { key: '/girisk/events', label: '事件流', icon: <SafetyCertificateOutlined /> },
-      { key: '/girisk/decisions', label: '决策审计', icon: <AuditOutlined /> },
+      { key: '/girisk/decisions', label: '决策中心', icon: <AuditOutlined /> },
       { key: '/girisk/replay', label: '风险回放', icon: <HistoryOutlined /> },
     ],
   },
@@ -53,6 +50,7 @@ export const RISK_NAVIGATION: NavEntry[] = [
     children: [
       { key: '/girisk/sandbox/order', label: '订单试算', icon: <ExperimentOutlined /> },
       { key: '/girisk/sandbox/bet', label: '投注试算', icon: <ExperimentOutlined /> },
+      { key: '/girisk/stream', label: '管线观察', icon: <CloudSyncOutlined /> },
       { key: '/girisk/api-lab', label: '接口实验室', icon: <ApiOutlined /> },
     ],
   },

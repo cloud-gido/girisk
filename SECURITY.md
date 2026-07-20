@@ -18,7 +18,7 @@ Please report privately:
 
 Include:
 
-- Affected component (`girisk-console` / `girisk-engine` / shared contract)
+- Affected component (`girisk-console` / `girisk-engine` / `girisk-common`)
 - Description and impact (auth bypass, injection, data leak, DoS, etc.)
 - Reproduction steps or PoC (non-destructive preferred)
 - Your contact for follow-up

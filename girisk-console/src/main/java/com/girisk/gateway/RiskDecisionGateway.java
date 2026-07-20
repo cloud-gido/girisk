@@ -144,6 +144,7 @@ public class RiskDecisionGateway {
                 request.odds() != null ? request.odds().toPlainString() : null,
                 payoutCents, maxAcceptableStakeCents,
                 toJson(reasons), toJson(versions), toJson(featureSnapshot),
+                null,
                 LocalDateTime.now());
         long logId = decisionLogRepository.insert(log);
 

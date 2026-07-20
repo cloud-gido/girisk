@@ -1,61 +1,60 @@
 # GiRisk（玑险）
 
-**GiRisk**（代号 **GIRISK**，中文名 **玑险**）是一套开源的交易风控决策平台，同属 **gido（玑渡）** 产品族。名字取自「璇玑定风险、决策有准绳」——在高并发投注链路里，把**限额、敞口、可解释裁决、值班运营**串成一条可审计、可回放的风控闭环。
+**GiRisk**（代号 **GIRISK**，中文名 **玑险**）是 **gido（玑渡）** 产品族中的交易风控平台：运营台（Console）+ 契约 +（内网）实时决策 Engine。
 
-它对接交易系统与实时计算：订单经 Kafka 预检进入决策引擎，输出唯一结论；运营台消费决策与物化视图，支撑大盘、工单与参数治理。
+- **公司 GitLab**：完整 monorepo（含 `girisk-engine`）
+- **公开 GitHub**：只同步 Console + 契约——用 `scripts/sync-github.sh`，**不要**靠 `.gitignore` 藏 Engine（会对 GitLab 一并失效）
 
 ---
 
 ## 你能用它做什么
 
-### GiRisk Engine（玑险·决）
-
-Flink 实时决策引擎：对互斥盘口做等比例限额（返彩口径 `b_max` + 冷启动种子），用比分矩阵估算最差庄家净亏，超阈值拒单；支持单注返彩上限。裁决写入唯一决策出口 `girisk.decision.v1`（理由、证据、版本三元组），并可物化到 Redis 供大盘读取。
-
 ### GiRisk Console（玑险·台）
 
-运营与配置平面：敞口看板（总体 → 球类 → 联赛 → 赛事）、四级限额覆盖与停盘、决策审计与按单回放、REVIEW 工单、规则 / 参数配置发布、投注试算与沙箱。本地可无 Flink 集群跑通演示回放看板。
+敞口看板、四级限额 / 停盘、决策审计与回放、REVIEW 工单、配置发布、试算沙箱。
 
 ### GiRisk Common（玑险·契）
 
-共享 Topic、决策码与契约定义，保证 Console / Engine / 交易侧说同一种「风控语言」。
+`girisk.*` Topic、决策码、`config.v1` 消息，供 Console / Engine / 交易侧共用。
+
+### GiRisk Engine（玑险·决）— 仅内网树
+
+Flink 作业：等比例限额、比分矩阵敞口、写出 `girisk.decision.v1` 与 Redis 视图。打 jar 后由 **gido 实时作业**提交（`gido-flink-runtime`）。公开 GitHub 同步时排除本模块。
 
 ---
 
-## 一条链路长什么样
+## 一条链路
 
 ```
-交易下单 → Kafka 风控预检 → GiRisk Engine 裁决
-                              ↓
-                    girisk.decision.v1（唯一出口）
-                              ↓
-              交易执行  ·  Console 审计 / REVIEW  ·  Redis 敞口大盘
+交易 → Kafka 预检 → Engine（内网 / gido）
+                      ↓
+              girisk.decision.v1
+                      ↓
+        交易 · Console 审计 · Redis 大盘
+
+Console 值班配置 → girisk.config.v1 → Engine
 ```
-
-Germany vs Paraguay 同源回放示例：接单 **1964** / 拦截 **767**；无风控最差约 **-772k** → 有风控约 **-19.8k**。
-
-> 生产环境体育裁决权威在 Engine；Console HTTP 试算与演示 profile 用于联调与值班，见文档说明。
 
 ---
 
-## 仓库结构
+## 仓库结构（GitLab 全量）
 
 ```
-girisk-common/     共享 Topic、决策码
-girisk-console/    运营台（Spring Boot + React）
-girisk-engine/     Flink 作业（Kafka → 决策 / Redis 视图）
-docs/              方案、演示、产品说明
-scripts/           本地演示脚本
-deploy/flink/      Flink 部署清单
+girisk-common/     契约
+girisk-console/    运营台
+girisk-engine/     Flink 决策（不同步到公开 GitHub）
+doris/             审计 DDL
+docs/              说明
+scripts/           演示 + sync-github.sh
+deploy/            Console 镜像；flink/ 仅内网
 ```
 
 | 文档 | 内容 |
 |------|------|
-| [docs/BRANDING.md](docs/BRANDING.md) | 品牌与命名约定 |
-| [docs/MONOREPO.md](docs/MONOREPO.md) | 模块与架构 |
-| [docs/DEMO-EXPOSURE.md](docs/DEMO-EXPOSURE.md) | 本地敞口演示 |
-| [docs/PRODUCT-EXPOSURE.md](docs/PRODUCT-EXPOSURE.md) | 看板信息架构 / 四级限额 |
-| [docs/risk-decision-platform-solution.md](docs/risk-decision-platform-solution.md) | 总体方案（v3） |
+| [docs/MONOREPO.md](docs/MONOREPO.md) | 模块与双远端 |
+| [docs/PRODUCT-EXPOSURE.md](docs/PRODUCT-EXPOSURE.md) | 看板 / 四级限额 |
+| [docs/AUDIT.md](docs/AUDIT.md) | Doris 审计 |
+| [deploy/README.md](deploy/README.md) | Console → GHCR |
 
 ---
 
@@ -63,110 +62,42 @@ deploy/flink/      Flink 部署清单
 
 ### 环境
 
-- JDK **21+**
-- Maven 3.9+
-- Node.js 18+（构建 Console 前端）
-- Redis（敞口看板演示）
-- （可选）Kafka + Flink 2.x（真链路）
+JDK 21+ · Maven 3.9+ · Node 18+ · Redis；（可选）Kafka / PostgreSQL 16 / Doris
 
-### 运营台 · 敞口演示（推荐先跑这个）
-
-不依赖 Flink 集群：启动时若高危表为空会自动灌入演示数据。
+### Console 演示
 
 ```bash
-docker compose up -d redis          # 或本机已有 Redis :6379
+docker compose up -d redis
 ./start.sh --exposure-demo --background
+# http://localhost:18088/girisk/exposure  admin / admin123
 ```
 
-打开：http://localhost:18088/girisk/exposure  
-
-| 用户名 | 密码 | 角色 |
-|--------|------|------|
-| admin | admin123 | ADMIN |
-| reviewer | review123 | REVIEWER |
-| viewer | view123 | VIEWER |
-
-也可：`./scripts/demo-germany-exposure.sh`（重放 CSV → Redis → 启 Console）。
-
-### 运营台 · 清洁链路
-
-默认无演示业务数据：
+### 清洁链路 / 全栈
 
 ```bash
-./start.sh --local --background     # H2
-./start.sh --mysql --background     # MySQL
-./stop.sh
+./start.sh --local --background
+./start.sh --stack          # PG + Kafka + Redis + Doris + Console
 ```
 
-### GiRisk Engine（Flink）
+### Engine jar（内网）
 
 ```bash
 mvn -pl girisk-engine -am -DskipTests package
-flink run -c com.girisk.flink.risk.FootballOrderKafkaJob \
-  girisk-engine/target/girisk-engine-1.0.0.jar \
-  --bootstrap localhost:9092 \
-  --sink.decision.enabled true \
-  --sink.redis.view.enabled true \
-  --limit.delta 0.2 \
-  --limit.seedPayoutYuan 5000 \
-  --exposure.maxWorstLossYuan 200000
+# → girisk-engine/target/girisk-engine-1.0.0.jar → gido 实时作业
 ```
 
-部署说明：[deploy/flink/README.md](deploy/flink/README.md)
+### 镜像与对外同步
 
----
-
-## 架构（目标）
-
-```
-交易 → girisk.trading.order.risk-check.v1
-         → GiRisk Engine
-         → girisk.decision.v1 → 交易 / Console（审计 · REVIEW）
-         → Redis girisk:view:* → Console 敞口大盘
-
-Console 配置 / 层级限额 →（配置面）→ Engine
+```bash
+bash scripts/build-images.sh                 # 本地 Console 镜像
+bash scripts/sync-github.sh                  # dry-run 导出公开子集
+GITHUB_REMOTE=git@github.com:<org>/girisk.git bash scripts/sync-github.sh --push
 ```
 
-生产路径上，体育在线裁决权威在 **Engine**；Console 的 HTTP decide 默认关闭体育限额（`exposure-demo` / `--local` 可开以便试算）。
+公开 GHCR：`ghcr.io/<owner>/girisk/girisk-console:latest`（见 `.github/workflows/docker-publish.yml`）。
 
 ---
 
-## 技术栈
+## License
 
-| 层 | 技术 |
-|----|------|
-| Console | Java 21 · Spring Boot 3 · React · Ant Design · Redis · H2/MySQL |
-| Engine | Apache Flink · Kafka · Redis |
-| 契约 | `girisk.*` Topics · 单一决策出口 `girisk.decision.v1` |
-
----
-
-## 状态说明（诚实版）
-
-| 能力 | 状态 |
-|------|------|
-| 单体仓 · Console / Engine 模块 | 已完成 |
-| 限额 + 比分网格 · 本地回放对齐 | 已完成 |
-| 敞口值班台（四级限额 / 停盘 / 列表下钻） | 已完成 |
-| Flink → decision.v1 / Redis 视图（代码） | 已完成 |
-| 本机 Flink + Kafka 全链路联调 | 视部署环境 |
-| 串关组合敞口 / 隐含概率加权 / sharp 分层 | 规划中（见方案文档） |
-
----
-
-## License & compliance
-
-Licensed under the **Apache License, Version 2.0** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
-
-| Document | Purpose |
-|----------|---------|
-| [DISCLAIMER.md](DISCLAIMER.md) | Regulatory / AS-IS / demo credentials |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | DCO sign-off, PR expectations |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
-| [SECURITY.md](SECURITY.md) | Private vulnerability reporting |
-| [docs/COMPLIANCE.md](docs/COMPLIANCE.md) | Release & license checklist |
-| [docs/GOVERNANCE.md](docs/GOVERNANCE.md) | Lightweight Apache-style governance |
-
-This project follows Apache-**style** open-source process; it is **not** (by default) an Apache Software Foundation project. See NOTICE.
-
-Before publishing: rotate demo secrets, enable GitHub Security Advisories, and update `.github/ISSUE_TEMPLATE/config.yml` URLs.
+Apache-2.0 — 见 [LICENSE](LICENSE)、[DISCLAIMER.md](DISCLAIMER.md)、[CONTRIBUTING.md](CONTRIBUTING.md)。

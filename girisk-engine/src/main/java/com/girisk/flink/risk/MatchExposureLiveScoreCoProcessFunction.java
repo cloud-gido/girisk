@@ -1,5 +1,6 @@
 package com.girisk.flink.risk;
 
+import com.girisk.flink.risk.config.EffectiveScopeRiskParams;
 import com.girisk.flink.risk.excel.FootballSportsOrder;
 import com.girisk.flink.risk.grid.LiveScoreGrid;
 import com.girisk.flink.risk.grid.ScoreGridParams;
@@ -51,11 +52,14 @@ public final class MatchExposureLiveScoreCoProcessFunction
     private final long pendingReserveTtlMs;
 
     private transient ListState<MatchExposureKafkaProcessFunction.StoredOrder> openOrdersState;
+    /** 本场全部已见订单（含拒单），用于「完全不拦截」对照敞口。 */
+    private transient ListState<MatchExposureKafkaProcessFunction.StoredOrder> allSeenOrdersState;
     private transient ValueState<Long> lastEventTimeState;
     private transient ValueState<Long> matchCutoffEventTimeState;
     private transient ValueState<Long> cleanupTimerAtState;
     private transient ValueState<LiveMatchScore> liveScoreState;
     private transient ValueState<EnrichedFootballOrder> lastTriggerOrderState;
+    private transient ValueState<EffectiveScopeRiskParams> lastScopeParamsState;
     private transient ValueState<PendingReserveBook> pendingBookState;
 
     public MatchExposureLiveScoreCoProcessFunction(
@@ -104,6 +108,12 @@ public final class MatchExposureLiveScoreCoProcessFunction
                                 new ListStateDescriptor<>(
                                         "open-orders-by-event-time",
                                         MatchExposureKafkaProcessFunction.StoredOrder.class));
+        allSeenOrdersState =
+                getRuntimeContext()
+                        .getListState(
+                                new ListStateDescriptor<>(
+                                        "all-seen-orders-by-event-time",
+                                        MatchExposureKafkaProcessFunction.StoredOrder.class));
         lastEventTimeState =
                 getRuntimeContext().getState(new ValueStateDescriptor<>("last-event-time", Long.class));
         matchCutoffEventTimeState =
@@ -115,6 +125,11 @@ public final class MatchExposureLiveScoreCoProcessFunction
         lastTriggerOrderState =
                 getRuntimeContext()
                         .getState(new ValueStateDescriptor<>("last-trigger-order", EnrichedFootballOrder.class));
+        lastScopeParamsState =
+                getRuntimeContext()
+                        .getState(
+                                new ValueStateDescriptor<>(
+                                        "last-scope-params", EffectiveScopeRiskParams.class));
         pendingBookState =
                 getRuntimeContext()
                         .getState(new ValueStateDescriptor<>("pending-reserve-book", PendingReserveBook.class));
@@ -129,7 +144,7 @@ public final class MatchExposureLiveScoreCoProcessFunction
             }
             return;
         }
-        processPrePending(event.prePending, ctx, out);
+        processPrePending(event.prePending, event.scopeParams, ctx, out);
     }
 
     private void applyPostUpdate(OrderPostStatusUpdate update) throws Exception {
@@ -141,7 +156,11 @@ public final class MatchExposureLiveScoreCoProcessFunction
         pendingBookState.update(book);
     }
 
-    private void processPrePending(EnrichedFootballOrder value, Context ctx, Collector<String> out)
+    private void processPrePending(
+            EnrichedFootballOrder value,
+            EffectiveScopeRiskParams scopeParams,
+            Context ctx,
+            Collector<String> out)
             throws Exception {
         if (!ensureEventTimeCleanupScheduled(ctx, value)) {
             return;
@@ -160,6 +179,7 @@ public final class MatchExposureLiveScoreCoProcessFunction
         lastEventTimeState.update(Math.max(lastTs == null ? Long.MIN_VALUE : lastTs, value.orderTimeMs));
 
         List<MatchExposureKafkaProcessFunction.StoredOrder> stored = snapshotOrders();
+        List<MatchExposureKafkaProcessFunction.StoredOrder> allSeen = snapshotAllSeen();
         String dedupeKey = ConfirmedOrderWindowState.normalizeOrderId(value.order.orderId);
         boolean duplicate = !dedupeKey.isEmpty() && ConfirmedOrderWindowState.containsOrderId(stored, dedupeKey);
         if (duplicate) {
@@ -175,15 +195,26 @@ public final class MatchExposureLiveScoreCoProcessFunction
             priorAccepted.addAll(book.toOrders(nowMs));
         }
         ScoreGridParams grid = LiveScoreGrid.resolve(gridTemplate, liveScoreState.value());
+        double effDelta = scopeParams != null ? scopeParams.limitDelta : limitDelta;
+        double effSeed = scopeParams != null ? scopeParams.seedPayoutYuan : seedPayoutYuan;
+        double effMaxWorst = scopeParams != null ? scopeParams.maxWorstLossYuan : maxWorstLossYuan;
+        double effMaxBet = scopeParams != null ? scopeParams.maxBetPayoutYuan : 0.0;
+        boolean tradingOn = scopeParams == null || scopeParams.tradingEnabled;
+        boolean limitOn = scopeParams == null || scopeParams.limitGateEnabled;
+        boolean exposureOn = scopeParams == null || scopeParams.exposureGateEnabled;
         MatchTriggerAcceptance acceptance =
                 MatchTriggerAcceptance.evaluate(
                         priorAccepted,
                         value,
                         duplicate,
                         grid.grid,
-                        limitDelta,
-                        seedPayoutYuan,
-                        maxWorstLossYuan,
+                        effDelta,
+                        effSeed,
+                        effMaxWorst,
+                        effMaxBet,
+                        tradingOn,
+                        limitOn,
+                        exposureOn,
                         postFeedbackEnabled);
 
         if (!postFeedbackEnabled && acceptance.persistTrigger()) {
@@ -204,9 +235,27 @@ public final class MatchExposureLiveScoreCoProcessFunction
                     value.order.orderId,
                     value.order.stakeYuan);
         }
+        if (!duplicate
+                && !dedupeKey.isEmpty()
+                && !ConfirmedOrderWindowState.containsOrderId(allSeen, dedupeKey)) {
+            allSeen.add(new MatchExposureKafkaProcessFunction.StoredOrder(value.orderTimeMs, value.order));
+            allSeen.sort(Comparator.comparingLong(s -> s.orderTimeMs));
+            allSeenOrdersState.update(allSeen);
+        }
 
         lastTriggerOrderState.update(value);
-        emitSnapshot(value, MatchKeys.of(value.order), acceptance, eventTimeOutOfOrder, ctx, out);
+        lastScopeParamsState.update(scopeParams);
+        emitSnapshot(
+                value,
+                MatchKeys.of(value.order),
+                acceptance,
+                ConfirmedOrderWindowState.toOrders(allSeen),
+                eventTimeOutOfOrder,
+                effDelta,
+                effSeed,
+                effMaxWorst,
+                ctx,
+                out);
     }
 
     @Override
@@ -242,17 +291,39 @@ public final class MatchExposureLiveScoreCoProcessFunction
                         ? MarketStakeAggregator.excludeOrderId(
                                 openOrders, trigger.order.orderId)
                         : openOrders;
+        EffectiveScopeRiskParams scopeParams = lastScopeParamsState.value();
+        double effDelta = scopeParams != null ? scopeParams.limitDelta : limitDelta;
+        double effSeed = scopeParams != null ? scopeParams.seedPayoutYuan : seedPayoutYuan;
+        double effMaxWorst = scopeParams != null ? scopeParams.maxWorstLossYuan : maxWorstLossYuan;
+        double effMaxBet = scopeParams != null ? scopeParams.maxBetPayoutYuan : 0.0;
+        boolean tradingOn = scopeParams == null || scopeParams.tradingEnabled;
+        boolean limitOn = scopeParams == null || scopeParams.limitGateEnabled;
+        boolean exposureOn = scopeParams == null || scopeParams.exposureGateEnabled;
         MatchTriggerAcceptance acceptance =
                 MatchTriggerAcceptance.evaluate(
                         prior,
                         trigger,
                         triggerAccepted,
                         grid.grid,
-                        limitDelta,
-                        seedPayoutYuan,
-                        maxWorstLossYuan,
+                        effDelta,
+                        effSeed,
+                        effMaxWorst,
+                        effMaxBet,
+                        tradingOn,
+                        limitOn,
+                        exposureOn,
                         postFeedbackEnabled);
-        emitSnapshot(trigger, MatchKeys.of(trigger.order), acceptance, false, ctx, out);
+        emitSnapshot(
+                trigger,
+                MatchKeys.of(trigger.order),
+                acceptance,
+                ConfirmedOrderWindowState.toOrders(snapshotAllSeen()),
+                false,
+                effDelta,
+                effSeed,
+                effMaxWorst,
+                ctx,
+                out);
     }
 
     @Override
@@ -267,6 +338,7 @@ public final class MatchExposureLiveScoreCoProcessFunction
         }
         int cleared = snapshotOrders().size();
         openOrdersState.clear();
+        allSeenOrdersState.clear();
         lastEventTimeState.clear();
         lastTriggerOrderState.clear();
         liveScoreState.clear();
@@ -288,7 +360,11 @@ public final class MatchExposureLiveScoreCoProcessFunction
             EnrichedFootballOrder trigger,
             String matchKey,
             MatchTriggerAcceptance acceptance,
+            List<FootballSportsOrder> allSeenOrders,
             boolean eventTimeOutOfOrder,
+            double effDelta,
+            double effSeed,
+            double effMaxWorst,
             Context ctx,
             Collector<String> out)
             throws Exception {
@@ -298,12 +374,13 @@ public final class MatchExposureLiveScoreCoProcessFunction
                 trigger,
                 matchKey,
                 acceptance,
+                allSeenOrders,
                 grid,
                 eventTimeOutOfOrder,
                 publishedAtMs,
-                limitDelta,
-                seedPayoutYuan,
-                maxWorstLossYuan,
+                effDelta,
+                effSeed,
+                effMaxWorst,
                 emitFlags.summary,
                 emitFlags.limit,
                 emitFlags.business,
@@ -345,6 +422,14 @@ public final class MatchExposureLiveScoreCoProcessFunction
     private List<MatchExposureKafkaProcessFunction.StoredOrder> snapshotOrders() throws Exception {
         List<MatchExposureKafkaProcessFunction.StoredOrder> list = new ArrayList<>();
         for (MatchExposureKafkaProcessFunction.StoredOrder s : openOrdersState.get()) {
+            list.add(s);
+        }
+        return list;
+    }
+
+    private List<MatchExposureKafkaProcessFunction.StoredOrder> snapshotAllSeen() throws Exception {
+        List<MatchExposureKafkaProcessFunction.StoredOrder> list = new ArrayList<>();
+        for (MatchExposureKafkaProcessFunction.StoredOrder s : allSeenOrdersState.get()) {
             list.add(s);
         }
         return list;

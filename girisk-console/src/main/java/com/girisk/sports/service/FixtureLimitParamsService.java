@@ -31,6 +31,8 @@ public class FixtureLimitParamsService {
     private final FixtureLimitOverrideStore overrideStore;
     private final ScopeLimitParamsService scopeLimitParamsService;
     private final SportsRiskProperties props;
+    private final ScopeDutyAuth dutyAuth;
+    private final ScopeRiskConfigDispatchService configDispatch;
     private final StringRedisTemplate redis;
 
     public FixtureLimitParamsService(
@@ -38,11 +40,15 @@ public class FixtureLimitParamsService {
             FixtureLimitOverrideStore overrideStore,
             ScopeLimitParamsService scopeLimitParamsService,
             SportsRiskProperties props,
+            ScopeDutyAuth dutyAuth,
+            ScopeRiskConfigDispatchService configDispatch,
             ObjectProvider<StringRedisTemplate> redis) {
         this.matchRepository = matchRepository;
         this.overrideStore = overrideStore;
         this.scopeLimitParamsService = scopeLimitParamsService;
         this.props = props;
+        this.dutyAuth = dutyAuth;
+        this.configDispatch = configDispatch;
         this.redis = redis.getIfAvailable();
     }
 
@@ -90,6 +96,7 @@ public class FixtureLimitParamsService {
     }
 
     public FixtureLimitParamsView upsert(String matchCode, FixtureLimitOverrideRequest req) {
+        dutyAuth.requireWrite(com.girisk.sports.model.LimitScopeType.MATCH);
         SportsMatch match = matchRepository.findByCode(matchCode)
                 .orElseThrow(() -> new BusinessException("比赛不存在: " + matchCode));
         if (req == null) {
@@ -124,16 +131,19 @@ public class FixtureLimitParamsService {
                     next.maxWorstLossYuan(), next.maxBetPayoutYuan());
         }
 
+        configDispatch.afterScopeWrite(com.girisk.sports.model.LimitScopeType.MATCH, matchCode);
         EffectiveParams effective = resolve(matchCode);
         patchFixtureViewReplayStats(matchCode, effective);
         return getView(matchCode);
     }
 
     public FixtureLimitParamsView clear(String matchCode) {
+        dutyAuth.requireWrite(com.girisk.sports.model.LimitScopeType.MATCH);
         matchRepository.findByCode(matchCode)
                 .orElseThrow(() -> new BusinessException("比赛不存在: " + matchCode));
         overrideStore.delete(matchCode);
         log.info("Cleared fixture limit override match={}", matchCode);
+        configDispatch.afterScopeWrite(com.girisk.sports.model.LimitScopeType.MATCH, matchCode);
         EffectiveParams effective = resolve(matchCode);
         patchFixtureViewReplayStats(matchCode, effective);
         return getView(matchCode);

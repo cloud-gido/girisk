@@ -5,13 +5,15 @@ spring:
   application:
     name: girisk-console
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/girisk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8}
-    driver-class-name: ${SPRING_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
+    # Console 元库：PostgreSQL 16（GIDO 家族）；Doris 审计仍走 MySQL 协议见 girisk.audit.doris
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/girisk}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
     username: ${SPRING_DATASOURCE_USERNAME:girisk}
     password: ${SPRING_DATASOURCE_PASSWORD:girisk}
   sql:
     init:
       mode: ${SQL_INIT_MODE:always}
+      continue-on-error: true
       schema-locations: classpath:schema.sql
       # data.sql is intentionally empty (clean pipeline). Use profile "demo" for samples.
       data-locations: classpath:data.sql
@@ -19,7 +21,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      timeout: 3s
+      # 短超时：失败快失败，避免拖死 Kafka poll 被踢出组
+      timeout: ${REDIS_TIMEOUT:1s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:1s}
+      lettuce:
+        shutdown-timeout: 200ms
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
     consumer:
@@ -27,6 +33,11 @@ spring:
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:50}
+      properties:
+        max.poll.interval.ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+        session.timeout.ms: ${KAFKA_SESSION_TIMEOUT_MS:45000}
+        heartbeat.interval.ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -61,6 +72,14 @@ girisk:
     enforce: ${GIRISK_TENANT_ENFORCE:false}
   review:
     callback-url: ${GIRISK_REVIEW_CALLBACK_URL:}
+  audit:
+    doris:
+      # Kafka → Routine Load 落 Doris 后，回放优先读 FE:9030；失败回退 MySQL
+      enabled: ${GIRISK_AUDIT_DORIS_ENABLED:false}
+      jdbc-url: ${GIRISK_AUDIT_DORIS_JDBC_URL:jdbc:mysql://localhost:9030/girisk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      username: ${GIRISK_AUDIT_DORIS_USERNAME:root}
+      password: ${GIRISK_AUDIT_DORIS_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
   kafka:
     enabled: ${KAFKA_ENABLED:true}
     bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
@@ -73,6 +92,19 @@ girisk:
     flink-decision-group: ${KAFKA_FLINK_DECISION_GROUP:girisk-console-flink-decision}
     topic-partitions: ${KAFKA_TOPIC_PARTITIONS:3}
     topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+    config-publish-timeout-seconds: ${KAFKA_CONFIG_PUBLISH_TIMEOUT_SECONDS:10}
+    config-publish-max-attempts: ${KAFKA_CONFIG_PUBLISH_MAX_ATTEMPTS:5}
+    config-publish-backoff-ms: ${KAFKA_CONFIG_PUBLISH_BACKOFF_MS:400}
+    config-bootstrap-sync-enabled: ${KAFKA_CONFIG_BOOTSTRAP_SYNC:true}
+    config-outbox-enabled: ${KAFKA_CONFIG_OUTBOX_ENABLED:true}
+    config-outbox-poll-ms: ${KAFKA_CONFIG_OUTBOX_POLL_MS:500}
+    config-outbox-batch-size: ${KAFKA_CONFIG_OUTBOX_BATCH_SIZE:32}
+    config-outbox-max-attempts: ${KAFKA_CONFIG_OUTBOX_MAX_ATTEMPTS:20}
+    consumer-max-poll-records: ${KAFKA_MAX_POLL_RECORDS:50}
+    consumer-max-poll-interval-ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+    consumer-session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:45000}
+    consumer-heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
+    decision-ingest-max-attempts: ${KAFKA_DECISION_INGEST_MAX_ATTEMPTS:3}
 
 logging:
   level:

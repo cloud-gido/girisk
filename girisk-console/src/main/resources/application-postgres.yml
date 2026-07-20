@@ -1,0 +1,19 @@
+# PostgreSQL 联调/生产 profile（对齐 GIDO：postgres:16 / RDS PG16）
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:girisk}
+    driver-class-name: org.postgresql.Driver
+    username: ${POSTGRES_USER:girisk}
+    password: ${POSTGRES_PASSWORD:girisk}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+      continue-on-error: true
+
+girisk:
+  redis:
+    enabled: ${REDIS_ENABLED:true}
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+  tenant:
+    enforce: false

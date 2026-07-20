@@ -2,7 +2,9 @@ import { Alert, Button, Card, Col, Descriptions, Empty, Input, Row, Space, Steps
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import GateSummaryPanel from '../components/GateSummaryPanel';
 import type { DecisionReplay } from '../types';
+import { buildGateSummary } from '../utils/gateSummary';
 import { DecisionTag, LevelTag } from '../utils/tags';
 
 export default function ReplayPage() {
@@ -51,7 +53,7 @@ export default function ReplayPage() {
     <>
       <div className="page-header">
         <h2>风险回放</h2>
-        <p>按订单 / Trace 还原当时盘口、规则版本、特征快照与决策理由 —— 仅凭决策消息本体即可解释</p>
+        <p>生产决策解释：按订单 / Trace 还原 Gate1 限额、Gate2 敞口、规则版本与理由</p>
       </div>
 
       <Card className="content-card" style={{ marginBottom: 16 }}>
@@ -84,6 +86,11 @@ export default function ReplayPage() {
             showIcon
             style={{ marginBottom: 16 }}
             message={replay.explainable ? '本条决策可完整解释与回溯' : '本条决策缺少 reasons/versions 快照（旧数据）'}
+            description={
+              replay.auditSource
+                ? `审计数据源：${replay.auditSource === 'doris' ? 'Doris（Kafka 原样）' : 'PostgreSQL（运营库回退）'}`
+                : undefined
+            }
           />
 
           <Steps
@@ -111,6 +118,11 @@ export default function ReplayPage() {
           />
 
           <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Card title="闸门摘要 · Gate1 / Gate2" className="content-card">
+                <GateSummaryPanel summary={replay.gateSummary || buildGateSummary(d)} />
+              </Card>
+            </Col>
             <Col xs={24} lg={12}>
               <Card title="决策结论" className="content-card">
                 <Descriptions column={1} size="small">

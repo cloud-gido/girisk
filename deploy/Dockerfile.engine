@@ -1,0 +1,33 @@
+# [可选 / 不进 GitHub 同步] 把 Engine jar 打进 Flink 镜像。
+# 生产：mvn 出 jar → gido 实时作业（gido-flink-runtime）。
+#   docker build -f deploy/Dockerfile.engine -t girisk-engine:local .
+
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-11
+ARG FLINK_BASE_IMAGE=flink:2.0.1-java17
+
+FROM ${MAVEN_IMAGE} AS build
+WORKDIR /src
+COPY deploy/maven/settings.xml /root/.m2/settings.xml
+COPY pom.xml ./
+COPY girisk-common/pom.xml girisk-common/pom.xml
+COPY girisk-console/pom.xml girisk-console/pom.xml
+COPY girisk-engine/pom.xml girisk-engine/pom.xml
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-engine -am dependency:go-offline -DskipTests && break; \
+      echo "[engine-build] dependency retry $i..."; sleep 5; \
+    done || true
+
+COPY girisk-common/ girisk-common/
+COPY girisk-engine/ girisk-engine/
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-engine -am package -DskipTests && exit 0; \
+      echo "[engine-build] package retry $i..."; sleep 5; \
+    done; \
+    exit 1
+
+FROM ${FLINK_BASE_IMAGE}
+USER root
+RUN mkdir -p /opt/flink/usrlib \
+    && chown -R flink:flink /opt/flink/usrlib
+COPY --from=build /src/girisk-engine/target/girisk-engine-1.0.0.jar /opt/flink/usrlib/app.jar
+USER flink

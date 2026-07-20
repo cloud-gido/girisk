@@ -9,7 +9,7 @@
     <version>1.0.0</version>
     <packaging>pom</packaging>
     <name>girisk</name>
-    <description>GiRisk (GIRISK) monorepo: Console + Flink decision Engine — gido suite</description>
+    <description>GiRisk monorepo: Console + contracts + internal Engine (GitLab full; GitHub sync excludes Engine)</description>
 
     <modules>
         <module>girisk-common</module>

@@ -8,7 +8,6 @@ import CasesPage from './pages/CasesPage';
 import ConfigCenterPage from './pages/ConfigCenterPage';
 import DashboardPage from './pages/DashboardPage';
 import DecisionsPage from './pages/DecisionsPage';
-import EventsPage from './pages/EventsPage';
 import LiabilityBoardPage from './pages/LiabilityBoardPage';
 import ListsPage from './pages/ListsPage';
 import LoginPage from './pages/LoginPage';
@@ -39,7 +38,7 @@ export default function App() {
               <Route path="/girisk/sandbox/order" element={<OrderSandboxPage />} />
               <Route path="/girisk/sandbox/bet" element={<SportsBetPage />} />
               <Route path="/girisk/evaluate" element={<LegacyRedirect to="/girisk/sandbox/order" />} />
-              <Route path="/girisk/events" element={<EventsPage />} />
+              <Route path="/girisk/events" element={<LegacyRedirect to="/girisk/stream" />} />
               <Route path="/girisk/decisions" element={<DecisionsPage />} />
               <Route path="/girisk/replay" element={<ReplayPage />} />
               <Route path="/girisk/config" element={<ConfigCenterPage />} />
@@ -52,7 +51,7 @@ export default function App() {
             <Route path="/" element={<Navigate to="/girisk" replace />} />
             <Route path="/stream" element={<LegacyRedirect to="/girisk/stream" />} />
             <Route path="/evaluate" element={<LegacyRedirect to="/girisk/sandbox/order" />} />
-            <Route path="/events" element={<LegacyRedirect to="/girisk/events" />} />
+            <Route path="/events" element={<LegacyRedirect to="/girisk/stream" />} />
             <Route path="/decisions" element={<LegacyRedirect to="/girisk/decisions" />} />
             <Route path="/rules" element={<LegacyRedirect to="/girisk/rules" />} />
             <Route path="/strategies" element={<LegacyRedirect to="/girisk/strategies" />} />

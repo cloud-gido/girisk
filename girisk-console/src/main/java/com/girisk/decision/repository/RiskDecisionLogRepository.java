@@ -7,6 +7,8 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,6 +43,7 @@ public class RiskDecisionLogRepository {
             rs.getString("reasons_json"),
             rs.getString("versions_json"),
             rs.getString("feature_snapshot_json"),
+            optionalString(rs, "evidence_json"),
             rs.getTimestamp("created_at").toLocalDateTime()
     );
 
@@ -74,9 +77,37 @@ public class RiskDecisionLogRepository {
     }
 
     public Optional<RiskDecisionLog> findByTraceId(String traceId) {
+        if (traceId == null || traceId.isBlank()) {
+            return Optional.empty();
+        }
         return jdbc.query(
                 "SELECT * FROM risk_decision_log WHERE trace_id = ? ORDER BY created_at DESC LIMIT 1",
                 MAPPER, traceId).stream().findFirst();
+    }
+
+    public Optional<RiskDecisionLog> findByRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return Optional.empty();
+        }
+        return jdbc.query(
+                "SELECT * FROM risk_decision_log WHERE request_id = ? ORDER BY created_at DESC LIMIT 1",
+                MAPPER, requestId).stream().findFirst();
+    }
+
+    /** 本场已接受（PASS/ACCEPT）决策，按时间正序，供敞口回填。 */
+    public List<RiskDecisionLog> findAcceptedByFixture(String fixtureId, int limit) {
+        if (fixtureId == null || fixtureId.isBlank()) {
+            return List.of();
+        }
+        int lim = Math.max(1, Math.min(limit, 5000));
+        return jdbc.query(
+                """
+                SELECT * FROM risk_decision_log
+                WHERE fixture_id = ? AND decision IN ('PASS','ACCEPT')
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                MAPPER, fixtureId, lim);
     }
 
     public long insert(RiskDecisionLog log) {
@@ -88,8 +119,8 @@ public class RiskDecisionLogRepository {
                       request_id,order_id,user_id,scenario,strategy_code,decision,risk_score,risk_level,
                       hit_rules,reason,amount,ip,device_id,latency_ms,source,
                       trace_id,fixture_id,operator_id,market_json,stake_cents,odds,payout_cents,
-                      max_acceptable_stake_cents,reasons_json,versions_json,feature_snapshot_json
-                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                      max_acceptable_stake_cents,reasons_json,versions_json,feature_snapshot_json,evidence_json
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     new String[]{"id"});
             int i = 1;
@@ -122,9 +153,18 @@ public class RiskDecisionLogRepository {
             else ps.setObject(i++, null);
             ps.setString(i++, log.reasonsJson());
             ps.setString(i++, log.versionsJson());
-            ps.setString(i, log.featureSnapshotJson());
+            ps.setString(i++, log.featureSnapshotJson());
+            ps.setString(i, log.evidenceJson());
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();
+    }
+
+    private static String optionalString(ResultSet rs, String col) throws SQLException {
+        try {
+            return rs.getString(col);
+        } catch (SQLException e) {
+            return null;
+        }
     }
 }

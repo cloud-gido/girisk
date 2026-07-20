@@ -1,26 +1,4 @@
-# 完整多阶段构建（Docker 内编译，需网络拉依赖）
-# 用法: docker build -f Dockerfile.full -t girisk-console:1.0.0 .
-
-FROM node:20-alpine AS frontend
-WORKDIR /fe
-RUN npm config set registry https://registry.npmmirror.com
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-RUN npm run build
-
-FROM maven:3.9-eclipse-temurin-21 AS backend
-WORKDIR /app
-COPY docker/maven-settings.xml /root/.m2/settings.xml
-COPY pom.xml ./
-RUN mvn -q -DskipTests dependency:go-offline || true
-COPY src ./src
-COPY --from=frontend /fe/dist ./frontend/dist
-RUN mvn -q -DskipTests package
-
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-ENV SERVER_PORT=18088
-EXPOSE 18088
-COPY --from=backend /app/target/girisk-1.0.0.jar app.jar
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# 已迁至仓库根 deploy/Dockerfile.console
+#   docker build -f deploy/Dockerfile.console -t girisk-console:local .
+FROM scratch
+LABEL org.opencontainers.image.description="Use deploy/Dockerfile.console from repo root"
