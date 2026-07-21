@@ -11,7 +11,7 @@
 # 国内可覆盖基础镜像:
 #   MAVEN_IMAGE=docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21 \
 #   JRE_IMAGE=docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine \
-#   NODE_IMAGE=docker.m.daocloud.io/library/node:20-alpine \
+#   NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine \
 #   bash scripts/build-images.sh
 
 set -euo pipefail
@@ -47,7 +47,7 @@ build_one() {
 
 if [ "$BUILD_CONSOLE" = "1" ]; then
   build_one girisk-console deploy/Dockerfile.console \
-    --build-arg "NODE_IMAGE=${NODE_IMAGE:-node:20-alpine}" \
+    --build-arg "NODE_IMAGE=${NODE_IMAGE:-node:22-alpine}" \
     --build-arg "MAVEN_IMAGE=${MAVEN_IMAGE:-maven:3.9-eclipse-temurin-21}" \
     --build-arg "JRE_IMAGE=${JRE_IMAGE:-eclipse-temurin:21-jre-alpine}"
 fi

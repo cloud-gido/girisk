@@ -75,7 +75,7 @@ services:
       context: .
       dockerfile: deploy/Dockerfile.console
       args:
-        NODE_IMAGE: ${NODE_IMAGE:-node:20-alpine}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
         MAVEN_IMAGE: ${MAVEN_IMAGE:-maven:3.9-eclipse-temurin-21}
         JRE_IMAGE: ${JRE_IMAGE:-eclipse-temurin:21-jre-alpine}
     ports:

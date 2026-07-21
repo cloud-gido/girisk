@@ -3,15 +3,18 @@
 #   docker build -f deploy/Dockerfile.console -t girisk-console:local .
 #
 # 构建参数可覆盖国内镜像，例如:
-#   --build-arg NODE_IMAGE=docker.m.daocloud.io/library/node:20-alpine
+#   --build-arg NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine
 #   --build-arg MAVEN_IMAGE=docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21
 #   --build-arg JRE_IMAGE=docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
+#
+# 多架构注意：frontend 必须用 $BUILDPLATFORM（宿主原生），禁止在 QEMU 下跑 npm
+# （GHA amd64 构建 arm64 时 QEMU 常 Illegal instruction / 卡死）。
 
-ARG NODE_IMAGE=node:20-alpine
+ARG NODE_IMAGE=node:22-alpine
 ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
 ARG JRE_IMAGE=eclipse-temurin:21-jre-alpine
 
-FROM ${NODE_IMAGE} AS frontend
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
 WORKDIR /fe
 RUN npm config set registry https://registry.npmmirror.com
 COPY girisk-console/frontend/package.json girisk-console/frontend/package-lock.json* ./

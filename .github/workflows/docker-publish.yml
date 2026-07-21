@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
           cache-dependency-path: girisk-console/frontend/package-lock.json
 
@@ -66,6 +66,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -87,6 +90,8 @@ jobs:
             type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
             type=raw,value=${{ inputs.image_version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_version != '' }}
 
+      # amd64 原生 + arm64（Jar 可跨架构；frontend 在 Dockerfile 用 BUILDPLATFORM 只编一次）
+      # 若仍超时，可改为 platforms: linux/amd64
       - name: Build and push girisk-console
         uses: docker/build-push-action@v6
         with:
@@ -94,10 +99,13 @@ jobs:
           file: deploy/Dockerfile.console
           push: true
           platforms: linux/amd64,linux/arm64
+          provenance: false
           tags: ${{ steps.meta_console.outputs.tags }}
           labels: ${{ steps.meta_console.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
-            NODE_IMAGE=node:20-alpine
+            NODE_IMAGE=node:22-alpine
             MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
             JRE_IMAGE=eclipse-temurin:21-jre-alpine
 
@@ -109,7 +117,7 @@ jobs:
             VER="${GITHUB_REF_NAME#v}"
             IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/girisk-console:${VER}"
           fi
-          docker pull "$IMAGE"
+          docker pull --platform linux/amd64 "$IMAGE"
           cid=$(docker run -d -p 18088:8080 \
             -e SERVER_PORT=8080 \
             -e SPRING_PROFILES_ACTIVE=local \
