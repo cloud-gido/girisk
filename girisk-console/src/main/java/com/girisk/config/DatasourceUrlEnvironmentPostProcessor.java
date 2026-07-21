@@ -4,14 +4,16 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.EnumerablePropertySource;
 import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.PropertySource;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 平台 Doppler {@code INFRA_*_DB_SERVICE_URL} 常见为 {@code postgresql://host:5432/db}，
- * Spring JDBC 需要 {@code jdbc:postgresql://...}。
+ * 平台 Doppler {@code INFRA_*_DB_SERVICE_URL} / {@code SPRING_DATASOURCE_URL}
+ * 常见为 {@code postgresql://host:5432/db}，Spring JDBC / Hikari 需要 {@code jdbc:postgresql://...}。
  */
 public class DatasourceUrlEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
@@ -23,7 +25,10 @@ public class DatasourceUrlEnvironmentPostProcessor implements EnvironmentPostPro
 
         String url = firstNonBlank(
                 environment.getProperty("SPRING_DATASOURCE_URL"),
-                environment.getProperty("spring.datasource.url"));
+                environment.getProperty("spring.datasource.url"),
+                environment.getProperty("DATABASE_URL"),
+                environment.getProperty("JDBC_URL"),
+                findInfraDbServiceUrl(environment));
         if (url != null && looksLikePlaceholderDefault(url)) {
             url = null;
         }
@@ -37,6 +42,8 @@ public class DatasourceUrlEnvironmentPostProcessor implements EnvironmentPostPro
         }
         if (url != null && !url.isBlank()) {
             String normalized = normalizeJdbcUrl(url);
+            // 自定义键优先，避免 yaml 里 ${SPRING_DATASOURCE_URL} 再读到未规范化的系统环境变量
+            props.put("girisk.datasource.jdbc-url", normalized);
             props.put("spring.datasource.url", normalized);
             props.put("SPRING_DATASOURCE_URL", normalized);
         }
@@ -45,6 +52,41 @@ public class DatasourceUrlEnvironmentPostProcessor implements EnvironmentPostPro
         if (!props.isEmpty()) {
             environment.getPropertySources().addFirst(new MapPropertySource(PROPERTY_SOURCE, props));
         }
+    }
+
+    /** 扫描 Doppler 风格 INFRA_*_DB_SERVICE_URL。 */
+    static String findInfraDbServiceUrl(ConfigurableEnvironment environment) {
+        for (PropertySource<?> ps : environment.getPropertySources()) {
+            if (!(ps instanceof EnumerablePropertySource<?> eps)) {
+                continue;
+            }
+            for (String name : eps.getPropertyNames()) {
+                if (name == null) {
+                    continue;
+                }
+                String upper = name.toUpperCase().replace('.', '_').replace('-', '_');
+                if (upper.endsWith("DB_SERVICE_URL") || upper.endsWith("_DATABASE_URL")) {
+                    Object v = eps.getProperty(name);
+                    if (v != null && !v.toString().isBlank()) {
+                        return v.toString().trim();
+                    }
+                }
+            }
+        }
+        Map<String, Object> sys = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : System.getenv().entrySet()) {
+            sys.put(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<String, Object> e : sys.entrySet()) {
+            String key = e.getKey();
+            if (key != null && (key.endsWith("DB_SERVICE_URL") || key.endsWith("_DATABASE_URL"))) {
+                Object v = e.getValue();
+                if (v != null && !v.toString().isBlank()) {
+                    return v.toString().trim();
+                }
+            }
+        }
+        return null;
     }
 
     /** application-postgres 里未解析的嵌套默认值，视为无效。 */
@@ -71,19 +113,33 @@ public class DatasourceUrlEnvironmentPostProcessor implements EnvironmentPostPro
         return props;
     }
 
-    static String normalizeJdbcUrl(String url) {
+    /**
+     * {@code postgresql://} / {@code postgres://} → {@code jdbc:postgresql://}。
+     * 已是 jdbc: 则原样返回。
+     */
+    public static String normalizeJdbcUrl(String url) {
+        if (url == null) {
+            return null;
+        }
         String trimmed = url.trim();
+        if (trimmed.isEmpty()) {
+            return trimmed;
+        }
         if (trimmed.startsWith("jdbc:")) {
             return trimmed;
         }
-        if (trimmed.startsWith("postgresql://") || trimmed.startsWith("postgres://")) {
-            return "jdbc:" + trimmed.replaceFirst("^postgres://", "postgresql://");
+        if (trimmed.startsWith("postgresql://")) {
+            return "jdbc:" + trimmed;
+        }
+        if (trimmed.startsWith("postgres://")) {
+            return "jdbc:postgresql://" + trimmed.substring("postgres://".length());
         }
         return trimmed;
     }
 
     @Override
     public int getOrder() {
+        // 尽量早，但仍晚于系统环境变量加载
         return Ordered.HIGHEST_PRECEDENCE + 10;
     }
 

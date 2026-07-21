@@ -6,7 +6,8 @@ spring:
     name: girisk-console
   datasource:
     # Console 元库：PostgreSQL 16（GIDO 家族）；Doris 审计仍走 MySQL 协议见 girisk.audit.doris
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/girisk}
+    # girisk.datasource.jdbc-url 由 DatasourceUrlEnvironmentPostProcessor 写入（含 jdbc: 前缀）
+    url: ${girisk.datasource.jdbc-url:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/girisk}}
     driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
     username: ${SPRING_DATASOURCE_USERNAME:girisk}
     password: ${SPRING_DATASOURCE_PASSWORD:girisk}
