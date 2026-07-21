@@ -23,10 +23,16 @@ public class ScopeRiskConfigOutboxPoller {
 
     private static final Logger log = LoggerFactory.getLogger(ScopeRiskConfigOutboxPoller.class);
 
+    /** Redis 不可达时限流打点，避免 500ms 一轮刷爆日志。 */
+    private static final long SKIP_LOG_INTERVAL_MS = 30_000L;
+
     private final ScopeRiskConfigOutbox outbox;
     private final ScopeRiskConfigDispatchService dispatch;
     private final RiskKafkaProperties properties;
     private final RiskEventRepository eventRepository;
+
+    private volatile long lastSkipLogAtMs;
+    private volatile long consecutiveSkipCount;
 
     public ScopeRiskConfigOutboxPoller(
             ScopeRiskConfigOutbox outbox,
@@ -46,9 +52,21 @@ public class ScopeRiskConfigOutboxPoller {
         }
         try {
             drainBatch();
+            if (consecutiveSkipCount > 0) {
+                log.info("config outbox poll recovered after {} skipped rounds", consecutiveSkipCount);
+                consecutiveSkipCount = 0;
+            }
         } catch (Exception e) {
-            // Redis 超时等：打日志后下一轮再试，勿打爆调度线程
-            log.warn("config outbox poll skipped: {}", e.getMessage());
+            // Redis 超时等：限流告警，下一轮再试，勿打爆调度线程 / 日志
+            consecutiveSkipCount++;
+            long now = System.currentTimeMillis();
+            if (consecutiveSkipCount == 1 || now - lastSkipLogAtMs >= SKIP_LOG_INTERVAL_MS) {
+                lastSkipLogAtMs = now;
+                log.warn(
+                        "config outbox poll skipped (x{}): {} — check REDIS_HOST / redis 可达性",
+                        consecutiveSkipCount,
+                        e.getMessage());
+            }
         }
     }
 

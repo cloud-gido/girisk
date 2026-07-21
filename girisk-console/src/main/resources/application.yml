@@ -19,6 +19,7 @@ spring:
       data-locations: classpath:data.sql
   data:
     redis:
+      # 也可用 SPRING_DATA_REDIS_URL=rediss://:token@host/0（EnvironmentPostProcessor 会拆成 host/ssl/password）
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       # 短超时：失败快失败，避免拖死 Kafka poll 被踢出组
