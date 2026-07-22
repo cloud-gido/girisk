@@ -5,43 +5,32 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.mock.env.MockEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class RedisUrlEnvironmentPostProcessorTest {
 
     @Test
-    void expandsRedissUrlWithoutBlankingSpringRedisUrl() {
+    void doesNotSetSpringDataRedisUrl() {
         MockEnvironment env = new MockEnvironment();
         env.setProperty(
                 "SPRING_DATA_REDIS_URL",
-                "rediss://:sTtN?Yo5q-qaHGpP6=kEWJRT!WOTFPI@master.gamelinelab-dev-sharedcache.cddsor.sae1.cache.amazonaws.com/0");
+                "rediss://:token@master.cache.amazonaws.com/0");
 
         new RedisUrlEnvironmentPostProcessor().postProcessEnvironment(env, new SpringApplication());
 
-        assertEquals(
-                "master.gamelinelab-dev-sharedcache.cddsor.sae1.cache.amazonaws.com",
-                env.getProperty("spring.data.redis.host"));
-        assertEquals("6379", String.valueOf(env.getProperty("spring.data.redis.port")));
-        assertEquals("true", String.valueOf(env.getProperty("spring.data.redis.ssl.enabled")));
-        assertEquals("sTtN?Yo5q-qaHGpP6=kEWJRT!WOTFPI", env.getProperty("spring.data.redis.password"));
-
-        String url = env.getProperty("spring.data.redis.url");
-        assertTrue(url != null && !url.isBlank(), "url must not be blanked");
-        assertFalse(url.contains("sTtN"), "password must not remain in url");
-        assertTrue(url.startsWith("rediss://master."));
+        assertEquals("master.cache.amazonaws.com", env.getProperty("spring.data.redis.host"));
+        // 我们的 property source 不应再写入 url；原 env 里的 URL 键仍在，但建连不靠它
+        assertNull(env.getPropertySources().get(RedisUrlEnvironmentPostProcessor.PROPERTY_SOURCE)
+                .getProperty("spring.data.redis.url"));
     }
 
     @Test
-    void ignoresPlainHostnameInRedisHost() {
+    void blankRedisHostRewrittenToLocalhost() {
         MockEnvironment env = new MockEnvironment();
-        env.setProperty("REDIS_HOST", "127.0.0.1");
-        env.setProperty("REDIS_PORT", "6379");
+        env.setProperty("REDIS_HOST", "  ");
 
         new RedisUrlEnvironmentPostProcessor().postProcessEnvironment(env, new SpringApplication());
 
-        // 未注入 giriskRedisUrl 源时，host 仍是原值（EPP no-op）
-        assertEquals("127.0.0.1", env.getProperty("REDIS_HOST"));
-        assertEquals(null, env.getPropertySources().get(RedisUrlEnvironmentPostProcessor.PROPERTY_SOURCE));
+        assertEquals("localhost", env.getProperty("REDIS_HOST"));
     }
 }
