@@ -21,10 +21,13 @@ public class KafkaSaslEnvironmentPostProcessor implements EnvironmentPostProcess
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+        // 优先 System.getenv（与 GISO 一致）；自建 Kafka factory 另见 KafkaSaslSupport
         String user = firstNonBlank(
+                System.getenv("KAFKA_SASL_USERNAME"),
                 environment.getProperty("KAFKA_SASL_USERNAME"),
                 environment.getProperty("SPRING_KAFKA_PROPERTIES_SASL_JAAS_USERNAME"));
         String pass = firstNonBlank(
+                System.getenv("KAFKA_SASL_PASSWORD"),
                 environment.getProperty("KAFKA_SASL_PASSWORD"),
                 environment.getProperty("SPRING_KAFKA_PROPERTIES_SASL_JAAS_PASSWORD"));
         if (user == null || pass == null) {

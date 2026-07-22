@@ -62,7 +62,16 @@ public class KafkaTopicBootstrap implements ApplicationListener<ApplicationReady
                 }
                 return;
             } catch (Exception e) {
-                log.warn("Kafka topic bootstrap attempt {}/{} failed: {}", attempt, maxAttempts, e.getMessage());
+                Throwable root = e;
+                while (root.getCause() != null && root.getCause() != root) {
+                    root = root.getCause();
+                }
+                log.warn(
+                        "Kafka topic bootstrap attempt {}/{} failed: {} (cause: {})",
+                        attempt,
+                        maxAttempts,
+                        e.getMessage(),
+                        root.getMessage());
                 if (attempt < maxAttempts) {
                     sleep(3000L * attempt);
                 }
@@ -76,16 +85,19 @@ public class KafkaTopicBootstrap implements ApplicationListener<ApplicationReady
         configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, properties.getBootstrapServers());
         configs.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 15000);
         configs.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 15000);
-        // MSK：必须与 consumer 相同的 SASL_SSL（由 KafkaSaslEnvironmentPostProcessor 注入）
-        putIfPresent(configs, "security.protocol",
-                environment.getProperty("girisk.kafka.security.protocol"),
-                environment.getProperty("spring.kafka.properties.security.protocol"));
-        putIfPresent(configs, "sasl.mechanism",
-                environment.getProperty("girisk.kafka.sasl.mechanism"),
-                environment.getProperty("spring.kafka.properties.sasl.mechanism"));
-        putIfPresent(configs, "sasl.jaas.config",
-                environment.getProperty("girisk.kafka.sasl.jaas.config"),
-                environment.getProperty("spring.kafka.properties.sasl.jaas.config"));
+        // 与 Consumer/Producer 相同：直接写入 client Map（自建 factory 不读 spring.kafka.properties）
+        KafkaSaslSupport.applyFromEnv(configs);
+        if (!configs.containsKey("sasl.jaas.config")) {
+            putIfPresent(configs, "security.protocol",
+                    environment.getProperty("girisk.kafka.security.protocol"),
+                    environment.getProperty("spring.kafka.properties.security.protocol"));
+            putIfPresent(configs, "sasl.mechanism",
+                    environment.getProperty("girisk.kafka.sasl.mechanism"),
+                    environment.getProperty("spring.kafka.properties.sasl.mechanism"));
+            putIfPresent(configs, "sasl.jaas.config",
+                    environment.getProperty("girisk.kafka.sasl.jaas.config"),
+                    environment.getProperty("spring.kafka.properties.sasl.jaas.config"));
+        }
 
         try (AdminClient admin = AdminClient.create(configs)) {
             Set<String> existing = admin.listTopics().names().get(20, TimeUnit.SECONDS);

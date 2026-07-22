@@ -40,6 +40,7 @@ public class KafkaStreamConfig {
         configs.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 30_000);
         configs.put(ProducerConfig.LINGER_MS_CONFIG, 5);
         configs.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
+        KafkaSaslSupport.applyFromEnv(configs);
         return new DefaultKafkaProducerFactory<>(configs);
     }
 
@@ -68,6 +69,7 @@ public class KafkaStreamConfig {
         configs.put(
                 ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG,
                 Math.max(1_000, props.getConsumerHeartbeatIntervalMs()));
+        KafkaSaslSupport.applyFromEnv(configs);
         return new DefaultKafkaConsumerFactory<>(configs);
     }
 
