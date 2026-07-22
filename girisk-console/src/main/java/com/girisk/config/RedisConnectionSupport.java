@@ -19,22 +19,23 @@ public final class RedisConnectionSupport {
     }
 
     public static RedisUrlParser.Info resolve(Environment environment) {
-        String url = firstRedisUri(
+        // 平台常把 INFRA_ARCHERY_REDIS_HOST 同步成 SPRING_DATA_REDIS_URL：
+        // 既可能是 rediss:// 整段，也可能只是短主机名（与 GISO Archery 复用模式一致）
+        String urlOrHost = firstNonBlank(
                 environment.getProperty("SPRING_DATA_REDIS_URL"),
                 environment.getProperty("spring.data.redis.url"),
                 environment.getProperty("REDIS_URL"),
-                findInfraRedisUrl(environment));
-        // HOST 里误塞整段 URI 时也认（但优先正式 URL 键）
-        if (url == null) {
-            String hostRaw = firstNonBlank(environment.getProperty("REDIS_HOST"));
-            if (RedisUrlParser.isRedisUri(hostRaw)) {
-                url = hostRaw;
-            }
-        }
+                findInfraRedisUrl(environment),
+                environment.getProperty("REDIS_HOST"));
         String overridePassword = firstNonBlank(
                 environment.getProperty("SPRING_DATA_REDIS_PASSWORD"),
                 environment.getProperty("spring.data.redis.password"),
                 environment.getProperty("REDIS_PASSWORD"));
+
+        String url = null;
+        if (RedisUrlParser.isRedisUri(urlOrHost)) {
+            url = urlOrHost;
+        }
 
         if (url != null) {
             RedisUrlParser.Info info = RedisUrlParser.parse(url, overridePassword);
@@ -42,7 +43,9 @@ public final class RedisConnectionSupport {
             return info;
         }
 
+        // 非 URI：把 SPRING_DATA_REDIS_URL / REDIS_HOST 当主机名（GISO fromParts 路径）
         String host = firstNonBlank(
+                RedisUrlParser.isRedisUri(urlOrHost) ? null : urlOrHost,
                 environment.getProperty("REDIS_HOST"),
                 environment.getProperty("spring.data.redis.host"));
         if (host == null || "localhost".equalsIgnoreCase(host)) {

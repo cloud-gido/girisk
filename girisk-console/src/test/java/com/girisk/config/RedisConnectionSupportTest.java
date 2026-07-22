@@ -32,4 +32,16 @@ class RedisConnectionSupportTest {
         RedisUrlParser.Info info = RedisConnectionSupport.resolve(env);
         assertEquals("localhost", info.host());
     }
+
+    @Test
+    void treatsNonUriSpringDataRedisUrlAsHostnameLikeGiso() {
+        MockEnvironment env = new MockEnvironment();
+        // Doppler INFRA_ARCHERY_REDIS_HOST 有时只是短主机名，却映射成了 SPRING_DATA_REDIS_URL
+        env.setProperty("SPRING_DATA_REDIS_URL", "internal-redis");
+        env.setProperty("SPRING_DATA_REDIS_PASSWORD", "secret-from-archery");
+
+        RedisUrlParser.Info info = RedisConnectionSupport.resolve(env);
+        assertEquals("internal-redis", info.host());
+        assertEquals("secret-from-archery", info.password());
+    }
 }
