@@ -14,6 +14,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 import java.util.Collection;
@@ -32,12 +33,15 @@ public class KafkaTopicBootstrap implements ApplicationListener<ApplicationReady
 
     private final RiskKafkaProperties properties;
     private final ObjectProvider<ScopeRiskConfigBootstrapSync> configBootstrapSync;
+    private final Environment environment;
 
     public KafkaTopicBootstrap(
             RiskKafkaProperties properties,
-            ObjectProvider<ScopeRiskConfigBootstrapSync> configBootstrapSync) {
+            ObjectProvider<ScopeRiskConfigBootstrapSync> configBootstrapSync,
+            Environment environment) {
         this.properties = properties;
         this.configBootstrapSync = configBootstrapSync;
+        this.environment = environment;
     }
 
     @Override
@@ -68,10 +72,20 @@ public class KafkaTopicBootstrap implements ApplicationListener<ApplicationReady
     }
 
     private void ensureTopics() throws Exception {
-        Map<String, Object> configs = Map.of(
-                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, properties.getBootstrapServers(),
-                AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 15000,
-                AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 15000);
+        Map<String, Object> configs = new HashMap<>();
+        configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, properties.getBootstrapServers());
+        configs.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 15000);
+        configs.put(AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, 15000);
+        // MSK：必须与 consumer 相同的 SASL_SSL（由 KafkaSaslEnvironmentPostProcessor 注入）
+        putIfPresent(configs, "security.protocol",
+                environment.getProperty("girisk.kafka.security.protocol"),
+                environment.getProperty("spring.kafka.properties.security.protocol"));
+        putIfPresent(configs, "sasl.mechanism",
+                environment.getProperty("girisk.kafka.sasl.mechanism"),
+                environment.getProperty("spring.kafka.properties.sasl.mechanism"));
+        putIfPresent(configs, "sasl.jaas.config",
+                environment.getProperty("girisk.kafka.sasl.jaas.config"),
+                environment.getProperty("spring.kafka.properties.sasl.jaas.config"));
 
         try (AdminClient admin = AdminClient.create(configs)) {
             Set<String> existing = admin.listTopics().names().get(20, TimeUnit.SECONDS);
@@ -81,6 +95,15 @@ public class KafkaTopicBootstrap implements ApplicationListener<ApplicationReady
             createIfMissing(admin, existing, properties.getStatusTopic(), false);
             createIfMissing(admin, existing, properties.getConfigTopic(), true);
             ensureCompactPolicy(admin, properties.getConfigTopic());
+        }
+    }
+
+    private static void putIfPresent(Map<String, Object> configs, String key, String... candidates) {
+        for (String v : candidates) {
+            if (v != null && !v.isBlank()) {
+                configs.put(key, v);
+                return;
+            }
         }
     }
 
