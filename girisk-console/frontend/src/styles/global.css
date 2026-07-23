@@ -376,3 +376,106 @@ body {
     width: 100%;
   }
 }
+
+/* ── 顶栏用户菜单（清新简洁） ── */
+.user-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 4px 4px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.user-menu-trigger:hover {
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.user-menu-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.user-menu-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-role {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.user-menu-panel {
+  min-width: 240px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.1), 0 0 0 1px rgba(15, 23, 42, 0.04);
+}
+
+.user-menu-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px;
+}
+
+.user-menu-role-tag {
+  margin: 0 !important;
+  border: none !important;
+  background: rgba(20, 184, 166, 0.12) !important;
+  color: #0f766e !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  padding: 0 6px !important;
+}
+
+.user-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.user-menu-item:hover {
+  background: #f0fdfa;
+  color: #0f766e;
+}
+
+.user-menu-item.danger {
+  color: #b91c1c;
+}
+
+.user-menu-item.danger:hover {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+@media (max-width: 720px) {
+  .user-menu-meta {
+    display: none;
+  }
+}

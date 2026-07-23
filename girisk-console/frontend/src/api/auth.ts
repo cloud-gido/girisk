@@ -1,6 +1,15 @@
 import type { ApiResponse } from '../types';
-import { setAuth } from '../auth/session';
+import { setAuth, type SessionUser } from '../auth/session';
 import { request } from './http';
+
+export type AuthPayload = {
+  token: string;
+  username: string;
+  displayName: string;
+  role: string;
+  roles?: string[];
+  permissions?: string[];
+};
 
 export async function login(username: string, password: string) {
   const res = await fetch('/api/v1/auth/login', {
@@ -8,12 +17,20 @@ export async function login(username: string, password: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   });
-  const json: ApiResponse<{ token: string; username: string; displayName: string; role: string }> = await res.json();
+  const json: ApiResponse<AuthPayload> = await res.json();
   if (!json.success) throw new Error(json.message || '登录失败');
-  setAuth(json.data.token, json.data.username, json.data.role, json.data.displayName);
-  return json.data;
+  const d = json.data;
+  setAuth(
+    d.token,
+    d.username,
+    d.role,
+    d.displayName,
+    d.roles ?? [d.role],
+    d.permissions ?? [],
+  );
+  return d;
 }
 
 export function me() {
-  return request<{ username: string; displayName: string; role: string }>('/auth/me');
+  return request<SessionUser>('/auth/me');
 }

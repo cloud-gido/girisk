@@ -1,7 +1,7 @@
 import { Button, Collapse, Space, Switch, Tag, Typography, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { sportsApi } from '../api/sportsClient';
-import { getUser } from '../auth/session';
+import { getUser, hasPerm, Perm } from '../auth/session';
 import type { ScopeGateOverrideRequest, ScopeGateParamsView } from '../types';
 
 type Props = {
@@ -41,7 +41,6 @@ export default function ScopeGateDutyBar({
 }: Props) {
   const [view, setView] = useState<ScopeGateParamsView | null>(null);
   const [saving, setSaving] = useState(false);
-  const role = getUser()?.role || 'VIEWER';
 
   const load = async () => {
     try {
@@ -67,11 +66,12 @@ export default function ScopeGateDutyBar({
   }, [mode, sportCode, leagueCode, matchCode]);
 
   const canWrite = view?.canWrite
-    ?? (role === 'ADMIN' || (role === 'REVIEWER' && (mode === 'league' || mode === 'match')));
+    ?? (hasPerm(Perm.DUTY_WRITE_GLOBAL)
+      || ((mode === 'league' || mode === 'match') && hasPerm(Perm.DUTY_WRITE_MATCH)));
 
   const save = async (patch: ScopeGateOverrideRequest) => {
     if (!view || !canWrite) {
-      message.warning('当前角色无权修改本层开关');
+      message.warning('当前账号无权修改本层开关');
       return;
     }
     setSaving(true);

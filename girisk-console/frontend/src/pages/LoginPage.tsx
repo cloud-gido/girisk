@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { login } from '../api/auth';
 import { isLoggedIn } from '../auth/session';
+import { getUserPrefs } from '../auth/userPrefs';
 import BrandMark from '../components/BrandMark';
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from '../brand';
 
@@ -12,7 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   if (isLoggedIn()) {
-    return <Navigate to="/girisk" replace />;
+    return <Navigate to={getUserPrefs().landingPath} replace />;
   }
 
   const onFinish = async (values: { username: string; password: string }) => {
@@ -20,7 +21,7 @@ export default function LoginPage() {
     try {
       await login(values.username, values.password);
       message.success('登录成功');
-      navigate('/girisk');
+      navigate(getUserPrefs().landingPath);
     } catch (e) {
       message.error((e as Error).message);
     } finally {

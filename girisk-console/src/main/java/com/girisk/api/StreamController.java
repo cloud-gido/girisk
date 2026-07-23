@@ -15,6 +15,7 @@ import com.girisk.stream.RealtimeEventHub;
 import com.girisk.stream.model.OrderEvent;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -56,6 +57,7 @@ public class StreamController {
     }
 
     @GetMapping("/stream/status")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<Map<String, Object>> status() {
         Map<String, Object> status = new LinkedHashMap<>();
         boolean kafkaOn = kafkaProperties.isEnabled() && kafkaPublisher != null;
@@ -73,6 +75,7 @@ public class StreamController {
     }
 
     @PostMapping("/stream/mock-order")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<?> mockOrder(@RequestBody(required = false) Map<String, Object> body) throws Exception {
         String json = buildMockOrderJson(body);
         if (kafkaPublisher != null) {
@@ -88,6 +91,7 @@ public class StreamController {
     }
 
     @PostMapping("/stream/mock-burst")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<Map<String, Object>> mockBurst(@RequestBody(required = false) Map<String, Object> body) throws Exception {
         int count = 5;
         if (body != null && body.get("count") != null) {
@@ -106,6 +110,7 @@ public class StreamController {
     }
 
     @PostMapping("/girisk/evaluate/internal")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<RiskEvaluateResponse> evaluateInternal(@Valid @RequestBody RiskEvaluateRequest request) {
         RiskDecisionResponse resp = gateway.decide(RiskDecisionRequest.fromLegacy(request), "API");
         var hits = resp.reasons() == null ? java.util.List.<String>of()

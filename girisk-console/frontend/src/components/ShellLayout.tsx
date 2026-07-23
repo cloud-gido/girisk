@@ -1,10 +1,10 @@
-import { LogoutOutlined } from '@ant-design/icons';
-import { Breadcrumb, Button, Layout, Menu, Space, Typography } from 'antd';
+import { Breadcrumb, Layout, Menu } from 'antd';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { MenuProps } from 'antd';
-import { clearAuth, getUser } from '../auth/session';
+import { getUserPrefs, type UserPrefs } from '../auth/userPrefs';
 import BrandMark from './BrandMark';
+import UserMenu from './UserMenu';
 
 const { Sider, Header, Content } = Layout;
 
@@ -31,7 +31,7 @@ export default function ShellLayout({
 }: ShellLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const user = getUser();
+  const [prefs, setPrefs] = useState<UserPrefs>(() => getUserPrefs());
 
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     const g = groupKeyForPath(location.pathname);
@@ -42,6 +42,15 @@ export default function ShellLayout({
     const g = groupKeyForPath(location.pathname);
     if (g) setOpenKeys((prev) => (prev.includes(g) ? prev : [...prev, g]));
   }, [location.pathname, groupKeyForPath]);
+
+  useEffect(() => {
+    const onPrefs = (e: Event) => {
+      const detail = (e as CustomEvent<UserPrefs>).detail;
+      if (detail) setPrefs(detail);
+    };
+    window.addEventListener('girisk-prefs', onPrefs);
+    return () => window.removeEventListener('girisk-prefs', onPrefs);
+  }, []);
 
   const breadcrumb = useMemo(() => {
     const items: { title: ReactNode }[] = [{ title: <Link to={homePath}>{homeLabel}</Link> }];
@@ -55,8 +64,10 @@ export default function ShellLayout({
     return items;
   }, [groupKeyForPath, groupLabels, homeLabel, homePath, location.pathname, pageTitleForPath]);
 
+  const contentPad = prefs.density === 'compact' ? 20 : 32;
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout style={{ minHeight: '100vh' }} className={`shell density-${prefs.density}`}>
       <Sider
         width={220}
         theme="light"
@@ -68,15 +79,16 @@ export default function ShellLayout({
           bottom: 0,
           zIndex: 100,
           overflow: 'auto',
+          background: '#fafcfb',
         }}
       >
-        <div style={{ padding: '20px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BrandMark size={36} />
+        <div style={{ padding: '18px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <BrandMark size={34} />
           <div>
-            <Typography.Text strong style={{ fontSize: 16, letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.02em', color: '#134e4a' }}>
               {productName}
-            </Typography.Text>
-            <div style={{ fontSize: 11, color: '#8c8c8c' }}>{productSubtitle}</div>
+            </div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>{productSubtitle}</div>
           </div>
         </div>
         <Menu
@@ -88,39 +100,29 @@ export default function ShellLayout({
           onClick={({ key }) => {
             if (typeof key === 'string' && key.startsWith('/')) navigate(key);
           }}
-          style={{ border: 'none', padding: '0 8px 16px' }}
+          style={{ border: 'none', padding: '0 8px 16px', background: 'transparent' }}
         />
       </Sider>
-      <Layout style={{ marginLeft: 220 }}>
+      <Layout style={{ marginLeft: 220, background: '#f5f7fa' }}>
         <Header
           style={{
-            background: '#fff',
-            padding: '0 32px',
-            borderBottom: '1px solid #f0f0f0',
+            background: 'rgba(255,255,255,0.92)',
+            backdropFilter: 'blur(8px)',
+            padding: '0 28px',
+            borderBottom: '1px solid #eef2f1',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             height: 56,
+            position: 'sticky',
+            top: 0,
+            zIndex: 50,
           }}
         >
           <Breadcrumb items={breadcrumb} />
-          <Space>
-            <Typography.Text type="secondary">
-              {user?.displayName} ({user?.role})
-            </Typography.Text>
-            <Button
-              type="text"
-              icon={<LogoutOutlined />}
-              onClick={() => {
-                clearAuth();
-                navigate('/login');
-              }}
-            >
-              退出
-            </Button>
-          </Space>
+          <UserMenu />
         </Header>
-        <Content style={{ padding: 32, minHeight: 'calc(100vh - 56px)' }}>
+        <Content style={{ padding: contentPad, minHeight: 'calc(100vh - 56px)' }}>
           <Outlet />
         </Content>
       </Layout>

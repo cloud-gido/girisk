@@ -4,12 +4,14 @@ import com.girisk.common.dto.ApiResponse;
 import com.girisk.configcenter.model.RiskFixtureView;
 import com.girisk.configcenter.repository.RiskFixtureViewRepository;
 import com.girisk.flink.RedisFixtureViewReader;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/fixtures")
+@PreAuthorize("hasAuthority('monitor:read')")
 public class FixtureViewController {
 
     private final RiskFixtureViewRepository repository;

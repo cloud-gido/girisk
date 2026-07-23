@@ -85,6 +85,40 @@ CREATE TABLE IF NOT EXISTS sys_user (
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- RBAC：用户 → 角色 → 权限（sys_user.role 保留为主角色展示/兼容）
+CREATE TABLE IF NOT EXISTS sys_role (
+    id          BIGSERIAL PRIMARY KEY,
+    code        VARCHAR(32)  NOT NULL UNIQUE,
+    name        VARCHAR(64)  NOT NULL,
+    builtin     BOOLEAN      NOT NULL DEFAULT TRUE,
+    description VARCHAR(256),
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_permission (
+    id          BIGSERIAL PRIMARY KEY,
+    code        VARCHAR(64)  NOT NULL UNIQUE,
+    name        VARCHAR(128) NOT NULL,
+    module      VARCHAR(32)  NOT NULL,
+    description VARCHAR(256),
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sys_user_role (
+    user_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
+    PRIMARY KEY (user_id, role_id)
+);
+
+CREATE TABLE IF NOT EXISTS sys_role_permission (
+    role_id       BIGINT NOT NULL,
+    permission_id BIGINT NOT NULL,
+    PRIMARY KEY (role_id, permission_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_role_user ON sys_user_role(user_id);
+CREATE INDEX IF NOT EXISTS idx_role_perm_role ON sys_role_permission(role_id);
+
 CREATE TABLE IF NOT EXISTS risk_case (
     id              BIGSERIAL PRIMARY KEY,
     case_no         VARCHAR(32)  NOT NULL UNIQUE,

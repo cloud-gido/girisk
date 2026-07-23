@@ -8,6 +8,7 @@ import com.girisk.gateway.RiskDecisionGateway;
 import com.girisk.gateway.RiskDecisionRequest;
 import com.girisk.gateway.RiskDecisionResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +19,7 @@ import java.util.List;
 @Deprecated
 @RestController
 @RequestMapping("/api/v1/girisk")
+@PreAuthorize("hasAuthority('sandbox:use')")
 public class RiskEvaluateController {
 
     private final RiskDecisionGateway gateway;

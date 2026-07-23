@@ -1,5 +1,6 @@
 package com.girisk.sports.service;
 
+import com.girisk.auth.rbac.RbacPermissions;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.sports.model.LimitScopeType;
 import org.springframework.security.core.Authentication;
@@ -7,26 +8,39 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
 /**
- * 值班写权限：默认/球类仅 ADMIN；联赛/单场 ADMIN 或 REVIEWER；VIEWER 只读。
+ * 值班写权限：全局/运动需 {@code duty:write_global}；联赛/单场需 match 或 global。
  */
 @Component
 public class ScopeDutyAuth {
 
-    public String currentRole() {
+    public Set<String> currentAuthorities() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Set<String> out = new LinkedHashSet<>();
         if (auth == null || auth.getAuthorities() == null) {
-            return "VIEWER";
+            return out;
         }
         for (GrantedAuthority a : auth.getAuthorities()) {
-            String r = a.getAuthority();
-            if (r == null) {
-                continue;
+            if (a != null && a.getAuthority() != null && !a.getAuthority().isBlank()) {
+                out.add(a.getAuthority());
             }
-            if (r.startsWith("ROLE_")) {
-                return r.substring(5);
+        }
+        return out;
+    }
+
+    public boolean hasAuthority(String authority) {
+        return currentAuthorities().contains(authority);
+    }
+
+    public String currentRole() {
+        for (String a : currentAuthorities()) {
+            if (a.startsWith("ROLE_")) {
+                return a.substring(5);
             }
-            return r;
         }
         return "VIEWER";
     }
@@ -40,24 +54,35 @@ public class ScopeDutyAuth {
     }
 
     public boolean canWrite(LimitScopeType type) {
-        String role = currentRole();
-        if ("ADMIN".equals(role)) {
+        // ROLE_ADMIN 等同全权限（兼容测试/旧 token）
+        if (hasAuthority("ROLE_" + RbacPermissions.ROLE_ADMIN)
+                || hasAuthority(RbacPermissions.DUTY_WRITE_GLOBAL)) {
             return true;
         }
-        if ("VIEWER".equals(role)) {
+        if (type == LimitScopeType.OVERALL || type == LimitScopeType.SPORT) {
             return false;
         }
-        // REVIEWER / TRADER：联赛与单场
-        return type == LimitScopeType.LEAGUE || type == LimitScopeType.MATCH;
+        return hasAuthority(RbacPermissions.DUTY_WRITE_MATCH);
     }
 
     public void requireWrite(LimitScopeType type) {
         if (!canWrite(type)) {
-            throw new BusinessException(
-                    "无权修改 " + type.name() + " 层配置（需要 "
-                            + ((type == LimitScopeType.OVERALL || type == LimitScopeType.SPORT)
-                            ? "ADMIN" : "ADMIN/REVIEWER")
-                            + "）");
+            String need = (type == LimitScopeType.OVERALL || type == LimitScopeType.SPORT)
+                    ? RbacPermissions.DUTY_WRITE_GLOBAL
+                    : RbacPermissions.DUTY_WRITE_MATCH + " 或 " + RbacPermissions.DUTY_WRITE_GLOBAL;
+            throw new BusinessException("无权修改 " + type.name() + " 层配置（需要 " + need + "）");
         }
+    }
+
+    /** 供前端/API 返回可写能力提示。 */
+    public Collection<String> writeHints() {
+        Set<String> hints = new LinkedHashSet<>();
+        if (hasAuthority(RbacPermissions.DUTY_WRITE_GLOBAL)) {
+            hints.add(RbacPermissions.DUTY_WRITE_GLOBAL);
+        }
+        if (hasAuthority(RbacPermissions.DUTY_WRITE_MATCH)) {
+            hints.add(RbacPermissions.DUTY_WRITE_MATCH);
+        }
+        return hints;
     }
 }

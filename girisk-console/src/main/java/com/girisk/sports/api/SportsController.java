@@ -31,6 +31,7 @@ import com.girisk.sports.service.SportsMatchStatusService;
 import com.girisk.sports.service.SportsReplaySeedService;
 import org.springframework.beans.factory.ObjectProvider;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -39,6 +40,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/sports")
+@PreAuthorize("hasAuthority('monitor:read')")
 public class SportsController {
 
     private final RiskDecisionGateway gateway;
@@ -86,6 +88,7 @@ public class SportsController {
      */
     @Deprecated
     @PostMapping("/bet/evaluate")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<SportsBetEvaluateResponse> evaluate(@Valid @RequestBody SportsBetEvaluateRequest request) {
         if (request.userId() == null || request.userId().isBlank()) {
             return ApiResponse.fail("体育投注必须提供 userId，请改用 POST /api/v1/girisk/decide");
@@ -289,6 +292,7 @@ public class SportsController {
      * 仅 ADMIN。
      */
     @PostMapping("/scopes/config-sync")
+    @PreAuthorize("hasAuthority('duty:write_global')")
     public ApiResponse<Map<String, Object>> syncConfigToKafka() {
         dutyAuth.requireWrite(LimitScopeType.OVERALL);
         if (configBootstrapSync == null) {
@@ -298,6 +302,7 @@ public class SportsController {
     }
 
     @PostMapping("/matches")
+    @PreAuthorize("hasAuthority('duty:write_global')")
     public ApiResponse<Map<String, Object>> createMatch(@RequestBody Map<String, Object> body) {
         String code = String.valueOf(body.get("matchCode"));
         String home = String.valueOf(body.get("homeTeam"));
@@ -316,6 +321,7 @@ public class SportsController {
      * Body 由 LocalExposureReplayMain --seed-out 生成。
      */
     @PostMapping("/replay/seed")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<Map<String, Object>> seedReplay(@RequestBody SportsReplaySeedService.ReplaySeedRequest body) {
         if (body == null || body.matchCode() == null || body.matchCode().isBlank()) {
             return ApiResponse.fail("matchCode required");
@@ -328,6 +334,7 @@ public class SportsController {
      * {@code force=true} 时覆盖已有高危表数据。
      */
     @PostMapping("/replay/demo")
+    @PreAuthorize("hasAuthority('sandbox:use')")
     public ApiResponse<Map<String, Object>> loadDemoReplay(
             @RequestParam(defaultValue = "false") boolean force) {
         return ApiResponse.ok(demoBootstrapService.loadDemo(force));

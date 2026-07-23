@@ -2,7 +2,7 @@ import type { ApiResponse } from '../types';
 import { clearAuth, getToken } from '../auth/session';
 
 function handleAuthFailure(status: number) {
-  if (status === 401 || status === 403) {
+  if (status === 401) {
     clearAuth();
     if (!window.location.pathname.startsWith('/login')) {
       window.location.href = '/login';
@@ -29,6 +29,9 @@ export async function request<T>(url: string, options?: RequestInit): Promise<T>
       if (json.message) message = json.message;
     } catch {
       /* ignore */
+    }
+    if (res.status === 403) {
+      throw new Error(message || '无权访问该资源');
     }
     throw new Error(message);
   }

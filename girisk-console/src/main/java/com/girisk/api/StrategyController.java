@@ -4,6 +4,7 @@ import com.girisk.common.dto.ApiResponse;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.strategy.model.RiskStrategy;
 import com.girisk.strategy.repository.RiskStrategyRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/strategies")
+@PreAuthorize("hasAuthority('config:manage')")
 public class StrategyController {
 
     private final RiskStrategyRepository repository;

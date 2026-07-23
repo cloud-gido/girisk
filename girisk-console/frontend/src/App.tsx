@@ -1,13 +1,17 @@
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Perm } from './auth/session';
 import ProtectedRoute from './components/ProtectedRoute';
+import RequirePerm from './components/RequirePerm';
 import RiskLayout from './components/RiskLayout';
 import ApiLabPage from './pages/ApiLabPage';
 import CasesPage from './pages/CasesPage';
 import ConfigCenterPage from './pages/ConfigCenterPage';
 import DashboardPage from './pages/DashboardPage';
 import DecisionsPage from './pages/DecisionsPage';
+import ForbiddenPage from './pages/ForbiddenPage';
+import IamPage from './pages/IamPage';
 import LiabilityBoardPage from './pages/LiabilityBoardPage';
 import ListsPage from './pages/ListsPage';
 import LoginPage from './pages/LoginPage';
@@ -30,23 +34,43 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute loginPath="/login" />}>
             <Route element={<RiskLayout />}>
-              <Route path="/girisk" element={<DashboardPage />} />
-              <Route path="/girisk/exposure" element={<LiabilityBoardPage />} />
+              <Route element={<RequirePerm perm={Perm.MONITOR_READ} />}>
+                <Route path="/girisk" element={<DashboardPage />} />
+                <Route path="/girisk/exposure" element={<LiabilityBoardPage />} />
+              </Route>
               <Route path="/girisk/liability" element={<LegacyRedirect to="/girisk/exposure" />} />
-              <Route path="/girisk/stream" element={<StreamPage />} />
+
+              <Route element={<RequirePerm perm={Perm.SANDBOX_USE} />}>
+                <Route path="/girisk/stream" element={<StreamPage />} />
+                <Route path="/girisk/sandbox/order" element={<OrderSandboxPage />} />
+                <Route path="/girisk/sandbox/bet" element={<SportsBetPage />} />
+                <Route path="/girisk/api-lab" element={<ApiLabPage />} />
+              </Route>
               <Route path="/girisk/sandbox" element={<LegacyRedirect to="/girisk/sandbox/order" />} />
-              <Route path="/girisk/sandbox/order" element={<OrderSandboxPage />} />
-              <Route path="/girisk/sandbox/bet" element={<SportsBetPage />} />
               <Route path="/girisk/evaluate" element={<LegacyRedirect to="/girisk/sandbox/order" />} />
               <Route path="/girisk/events" element={<LegacyRedirect to="/girisk/stream" />} />
-              <Route path="/girisk/decisions" element={<DecisionsPage />} />
-              <Route path="/girisk/replay" element={<ReplayPage />} />
-              <Route path="/girisk/config" element={<ConfigCenterPage />} />
-              <Route path="/girisk/rules" element={<RulesPage />} />
-              <Route path="/girisk/strategies" element={<StrategiesPage />} />
-              <Route path="/girisk/lists" element={<ListsPage />} />
-              <Route path="/girisk/cases" element={<CasesPage />} />
-              <Route path="/girisk/api-lab" element={<ApiLabPage />} />
+
+              <Route element={<RequirePerm perm={Perm.AUDIT_READ} />}>
+                <Route path="/girisk/decisions" element={<DecisionsPage />} />
+                <Route path="/girisk/replay" element={<ReplayPage />} />
+              </Route>
+
+              <Route element={<RequirePerm perm={Perm.CONFIG_MANAGE} />}>
+                <Route path="/girisk/config" element={<ConfigCenterPage />} />
+                <Route path="/girisk/rules" element={<RulesPage />} />
+                <Route path="/girisk/strategies" element={<StrategiesPage />} />
+                <Route path="/girisk/lists" element={<ListsPage />} />
+              </Route>
+
+              <Route element={<RequirePerm perm={Perm.CASE_REVIEW} />}>
+                <Route path="/girisk/cases" element={<CasesPage />} />
+              </Route>
+
+              <Route element={<RequirePerm perm={Perm.IAM_MANAGE} />}>
+                <Route path="/girisk/iam" element={<IamPage />} />
+              </Route>
+
+              <Route path="/girisk/forbidden" element={<ForbiddenPage />} />
             </Route>
             <Route path="/" element={<Navigate to="/girisk" replace />} />
             <Route path="/stream" element={<LegacyRedirect to="/girisk/stream" />} />

@@ -7,6 +7,7 @@ import com.girisk.common.dto.ApiResponse;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.gateway.TenantContext;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/cases")
+@PreAuthorize("hasAuthority('case:review')")
 public class CaseController {
 
     private final RiskCaseRepository repository;

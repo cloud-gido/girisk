@@ -3,6 +3,7 @@ package com.girisk.api;
 import com.girisk.common.dto.ApiResponse;
 import com.girisk.configcenter.model.RiskConfigRelease;
 import com.girisk.configcenter.service.ConfigReleaseService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/config/releases")
+@PreAuthorize("hasAuthority('config:manage')")
 public class ConfigReleaseController {
 
     private final ConfigReleaseService service;

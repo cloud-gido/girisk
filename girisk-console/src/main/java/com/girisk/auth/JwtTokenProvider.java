@@ -11,7 +11,9 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 
 @Component
 public class JwtTokenProvider {
@@ -26,11 +28,16 @@ public class JwtTokenProvider {
         this.expiryHours = expiryHours;
     }
 
-    public String createToken(SysUser user) {
+    public String createToken(SysUser user, Collection<String> roles, Collection<String> permissions) {
         Instant now = Instant.now();
+        List<String> roleList = roles == null ? List.of() : List.copyOf(roles);
+        List<String> permList = permissions == null ? List.of() : List.copyOf(permissions);
+        String primary = roleList.isEmpty() ? user.role() : roleList.get(0);
         return Jwts.builder()
                 .subject(user.username())
-                .claim("role", user.role())
+                .claim("role", primary)
+                .claim("roles", roleList)
+                .claim("perms", permList)
                 .claim("displayName", user.displayName())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiryHours, ChronoUnit.HOURS)))
@@ -40,5 +47,24 @@ public class JwtTokenProvider {
 
     public Claims parse(String token) {
         return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> rolesFromClaims(Claims claims) {
+        Object raw = claims.get("roles");
+        if (raw instanceof List<?> list && !list.isEmpty()) {
+            return list.stream().map(String::valueOf).toList();
+        }
+        String role = claims.get("role", String.class);
+        return role == null || role.isBlank() ? List.of() : List.of(role);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> permsFromClaims(Claims claims) {
+        Object raw = claims.get("perms");
+        if (raw instanceof List<?> list) {
+            return list.stream().map(String::valueOf).toList();
+        }
+        return List.of();
     }
 }

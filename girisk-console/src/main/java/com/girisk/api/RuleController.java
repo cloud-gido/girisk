@@ -4,6 +4,7 @@ import com.girisk.common.dto.ApiResponse;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.rule.model.RiskRule;
 import com.girisk.rule.repository.RiskRuleRepository;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/rules")
+@PreAuthorize("hasAuthority('config:manage')")
 public class RuleController {
 
     private final RiskRuleRepository repository;
