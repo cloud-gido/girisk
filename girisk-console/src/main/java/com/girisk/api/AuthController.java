@@ -6,9 +6,13 @@ import com.girisk.auth.dto.LoginResponse;
 import com.girisk.auth.dto.UserProfile;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.common.dto.ApiResponse;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -31,5 +35,11 @@ public class AuthController {
             throw new BusinessException("未登录");
         }
         return ApiResponse.ok(authService.profile(authentication.getName()));
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<Map<String, String>> logout(HttpServletRequest request) {
+        authService.logout(request.getHeader(HttpHeaders.AUTHORIZATION));
+        return ApiResponse.ok(Map.of("status", "ok"));
     }
 }

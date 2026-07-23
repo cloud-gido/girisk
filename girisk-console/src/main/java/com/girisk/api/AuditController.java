@@ -95,6 +95,12 @@ public class AuditController {
         return ApiResponse.ok(eventRepository.findRecent(limit));
     }
 
+    /** 运营操作审计（账号 / 值班写 / 登录登出），actor 在 userId 字段。 */
+    @GetMapping("/ops-audit")
+    public ApiResponse<List<RiskEvent>> opsAudit(@RequestParam(defaultValue = "100") int limit) {
+        return ApiResponse.ok(eventRepository.findRecentOpsAudit(Math.min(Math.max(limit, 1), 500)));
+    }
+
     private void assertTenant(String operatorId) {
         if (!tenantEnforce) return;
         String op = tenantContext.getOperatorId();

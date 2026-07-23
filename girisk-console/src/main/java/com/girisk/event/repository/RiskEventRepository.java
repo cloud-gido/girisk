@@ -26,6 +26,20 @@ public class RiskEventRepository {
         return jdbc.query("SELECT * FROM risk_event ORDER BY created_at DESC LIMIT ?", MAPPER, limit);
     }
 
+    /** 运营审计：IAM_ / DUTY_ / AUTH_ 等前缀事件。 */
+    public List<RiskEvent> findRecentOpsAudit(int limit) {
+        return jdbc.query(
+                """
+                SELECT * FROM risk_event
+                WHERE event_type LIKE 'IAM_%'
+                   OR event_type LIKE 'DUTY_%'
+                   OR event_type LIKE 'AUTH_%'
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                MAPPER, limit);
+    }
+
     public void insert(String eventType, String severity, String orderId, String userId, String title, String detail) {
         jdbc.update(
                 "INSERT INTO risk_event(event_type,severity,order_id,user_id,title,detail) VALUES(?,?,?,?,?,?)",

@@ -15,6 +15,7 @@ import IamPage from './pages/IamPage';
 import LiabilityBoardPage from './pages/LiabilityBoardPage';
 import ListsPage from './pages/ListsPage';
 import LoginPage from './pages/LoginPage';
+import OpsAuditPage from './pages/OpsAuditPage';
 import OrderSandboxPage from './pages/OrderSandboxPage';
 import ReplayPage from './pages/ReplayPage';
 import RulesPage from './pages/RulesPage';
@@ -53,6 +54,7 @@ export default function App() {
               <Route element={<RequirePerm perm={Perm.AUDIT_READ} />}>
                 <Route path="/girisk/decisions" element={<DecisionsPage />} />
                 <Route path="/girisk/replay" element={<ReplayPage />} />
+                <Route path="/girisk/ops-audit" element={<OpsAuditPage />} />
               </Route>
 
               <Route element={<RequirePerm perm={Perm.CONFIG_MANAGE} />}>

@@ -11,11 +11,23 @@ import java.util.Optional;
 @Repository
 public class UserRepository {
 
-    private static final RowMapper<SysUser> MAPPER = (rs, i) -> new SysUser(
-            rs.getLong("id"), rs.getString("username"), rs.getString("password_hash"),
-            rs.getString("display_name"), rs.getString("role"), rs.getBoolean("enabled"),
-            rs.getTimestamp("created_at").toLocalDateTime()
-    );
+    private static final RowMapper<SysUser> MAPPER = (rs, i) -> {
+        String scope = "*";
+        try {
+            String s = rs.getString("operator_scope");
+            if (s != null && !s.isBlank()) {
+                scope = s;
+            }
+        } catch (Exception ignored) {
+            // 旧库尚未加列时容错
+        }
+        return new SysUser(
+                rs.getLong("id"), rs.getString("username"), rs.getString("password_hash"),
+                rs.getString("display_name"), rs.getString("role"), rs.getBoolean("enabled"),
+                scope,
+                rs.getTimestamp("created_at").toLocalDateTime()
+        );
+    };
 
     private final JdbcTemplate jdbc;
 
@@ -41,17 +53,23 @@ public class UserRepository {
     }
 
     public long insert(String username, String passwordHash, String displayName, String role) {
+        return insert(username, passwordHash, displayName, role, "*");
+    }
+
+    public long insert(String username, String passwordHash, String displayName, String role, String operatorScope) {
         jdbc.update(
-                "INSERT INTO sys_user(username, password_hash, display_name, role) VALUES(?,?,?,?)",
-                username, passwordHash, displayName, role);
+                "INSERT INTO sys_user(username, password_hash, display_name, role, operator_scope) VALUES(?,?,?,?,?)",
+                username, passwordHash, displayName, role, operatorScope == null || operatorScope.isBlank() ? "*" : operatorScope);
         Long id = jdbc.queryForObject("SELECT id FROM sys_user WHERE username = ?", Long.class, username);
         return id != null ? id : 0L;
     }
 
-    public void updateProfile(long id, String displayName, String primaryRole, boolean enabled) {
+    public void updateProfile(long id, String displayName, String primaryRole, boolean enabled, String operatorScope) {
         jdbc.update(
-                "UPDATE sys_user SET display_name = ?, role = ?, enabled = ? WHERE id = ?",
-                displayName, primaryRole, enabled, id);
+                "UPDATE sys_user SET display_name = ?, role = ?, enabled = ?, operator_scope = ? WHERE id = ?",
+                displayName, primaryRole, enabled,
+                operatorScope == null || operatorScope.isBlank() ? "*" : operatorScope,
+                id);
     }
 
     public void updatePassword(long id, String passwordHash) {

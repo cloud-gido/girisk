@@ -80,6 +80,7 @@ export const riskApi = {
   fixture: (fixtureId: string) =>
     request<import('../types').RiskFixtureView>(`/fixtures/${encodeURIComponent(fixtureId)}`),
   events: (limit = 50) => request<import('../types').RiskEvent[]>(`/events?limit=${limit}`),
+  opsAudit: (limit = 100) => request<import('../types').RiskEvent[]>(`/ops-audit?limit=${limit}`),
   streamStatus: () => request<import('../types').StreamStatus>('/stream/status'),
   mockOrder: (body?: Record<string, unknown>) =>
     request<import('../types').RiskEvaluateResponse | { via: string; orderId: string; topic?: string; message?: string }>(

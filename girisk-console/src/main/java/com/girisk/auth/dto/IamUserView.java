@@ -10,5 +10,6 @@ public record IamUserView(
         boolean enabled,
         List<String> roles,
         List<String> permissions,
+        String operatorScope,
         String createdAt
 ) {}

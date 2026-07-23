@@ -10,5 +10,7 @@ public record CreateUserRequest(
         @NotBlank @Size(min = 6, max = 64) String password,
         @NotBlank @Size(max = 64) String displayName,
         @NotBlank String role,
-        List<String> roles
+        List<String> roles,
+        /** * = 全部商户；否则逗号分隔 operatorId */
+        @Size(max = 512) String operatorScope
 ) {}

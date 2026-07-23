@@ -8,6 +8,7 @@ import { Avatar, Divider, Dropdown, Modal, Radio, Space, Tag, Typography, messag
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getUser, hasPerm, Perm } from '../auth/session';
+import { logout as apiLogout } from '../api/auth';
 import {
   avatarHue,
   avatarInitials,
@@ -47,7 +48,8 @@ export default function UserMenu() {
     setPrefsOpen(false);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await apiLogout();
     clearAuth();
     navigate('/login');
   };

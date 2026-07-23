@@ -9,5 +9,6 @@ public record UpdateUserRequest(
         @NotBlank @Size(max = 64) String displayName,
         @NotBlank String role,
         Boolean enabled,
-        List<String> roles
+        List<String> roles,
+        @Size(max = 512) String operatorScope
 ) {}

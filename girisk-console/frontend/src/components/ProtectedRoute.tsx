@@ -30,6 +30,7 @@ export default function ProtectedRoute({
             profile.displayName,
             profile.roles ?? [profile.role],
             profile.permissions ?? [],
+            profile.operatorScope ?? '*',
           );
         }
         setValid(true);

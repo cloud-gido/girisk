@@ -4,6 +4,7 @@ export type SessionUser = {
   displayName: string;
   roles?: string[];
   permissions?: string[];
+  operatorScope?: string;
 };
 
 export function getToken(): string | null {
@@ -17,11 +18,19 @@ export function setAuth(
   displayName: string,
   roles: string[] = [],
   permissions: string[] = [],
+  operatorScope: string = '*',
 ) {
   localStorage.setItem('risk_token', token);
   localStorage.setItem(
     'risk_user',
-    JSON.stringify({ username, role, displayName, roles, permissions } satisfies SessionUser),
+    JSON.stringify({
+      username,
+      role,
+      displayName,
+      roles,
+      permissions,
+      operatorScope,
+    } satisfies SessionUser),
   );
 }
 

@@ -26,6 +26,7 @@ type IamUser = {
   enabled: boolean;
   roles: string[];
   permissions: string[];
+  operatorScope?: string;
   createdAt?: string;
 };
 
@@ -110,6 +111,16 @@ export default function IamPage() {
                     { title: '用户名', dataIndex: 'username' },
                     { title: '显示名', dataIndex: 'displayName' },
                     {
+                      title: '商户范围',
+                      dataIndex: 'operatorScope',
+                      width: 140,
+                      render: (v?: string) => (
+                        <Typography.Text code ellipsis style={{ maxWidth: 120 }}>
+                          {v || '*'}
+                        </Typography.Text>
+                      ),
+                    },
+                    {
                       title: '角色',
                       dataIndex: 'roles',
                       render: (rs: string[]) => (
@@ -154,6 +165,7 @@ export default function IamPage() {
                                 role: row.role,
                                 roles: row.roles,
                                 enabled: row.enabled,
+                                operatorScope: row.operatorScope || '*',
                               });
                             }}
                           >
@@ -273,6 +285,14 @@ export default function IamPage() {
           <Form.Item name="role" label="主角色" rules={[{ required: true }]} initialValue="VIEWER">
             <Select options={roleOptions} />
           </Form.Item>
+          <Form.Item
+            name="operatorScope"
+            label="商户范围"
+            initialValue="*"
+            extra="* = 全部；多个商户用逗号分隔，如 OP-A001,OP-B002"
+          >
+            <Input placeholder="*" />
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -312,6 +332,13 @@ export default function IamPage() {
           </Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch />
+          </Form.Item>
+          <Form.Item
+            name="operatorScope"
+            label="商户范围"
+            extra="* = 全部；多个商户用逗号分隔"
+          >
+            <Input placeholder="*" />
           </Form.Item>
         </Form>
       </Modal>

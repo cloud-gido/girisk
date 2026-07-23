@@ -1,5 +1,7 @@
 package com.girisk.sports.service;
 
+import com.girisk.audit.OpsAuditService;
+import com.girisk.auth.OperatorScopeService;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.sports.dto.ScopeGateOverrideRequest;
 import com.girisk.sports.dto.ScopeGateParamsView;
@@ -11,6 +13,8 @@ import com.girisk.sports.repository.SportsMatchRepository;
 import com.girisk.sports.store.ScopeGateOverrideStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -29,16 +33,71 @@ public class ScopeGateService {
     private final SportsMatchRepository matchRepository;
     private final ScopeDutyAuth dutyAuth;
     private final ScopeRiskConfigDispatchService configDispatch;
+    private final ObjectProvider<OperatorScopeService> operatorScope;
+    private final ObjectProvider<OpsAuditService> opsAudit;
 
+    @Autowired
+    public ScopeGateService(
+            ScopeGateOverrideStore store,
+            SportsMatchRepository matchRepository,
+            ScopeDutyAuth dutyAuth,
+            ScopeRiskConfigDispatchService configDispatch,
+            ObjectProvider<OperatorScopeService> operatorScope,
+            ObjectProvider<OpsAuditService> opsAudit) {
+        this.store = store;
+        this.matchRepository = matchRepository;
+        this.dutyAuth = dutyAuth;
+        this.configDispatch = configDispatch;
+        this.operatorScope = operatorScope;
+        this.opsAudit = opsAudit;
+    }
+
+    /** 兼容单测：无 OperatorScope / OpsAudit */
     public ScopeGateService(
             ScopeGateOverrideStore store,
             SportsMatchRepository matchRepository,
             ScopeDutyAuth dutyAuth,
             ScopeRiskConfigDispatchService configDispatch) {
-        this.store = store;
-        this.matchRepository = matchRepository;
-        this.dutyAuth = dutyAuth;
-        this.configDispatch = configDispatch;
+        this(store, matchRepository, dutyAuth, configDispatch, emptyProvider(), emptyProvider());
+    }
+
+    private static <T> ObjectProvider<T> emptyProvider() {
+        return new ObjectProvider<>() {
+            @Override
+            public T getObject() {
+                return null;
+            }
+
+            @Override
+            public T getObject(Object... args) {
+                return null;
+            }
+
+            @Override
+            public T getIfAvailable() {
+                return null;
+            }
+
+            @Override
+            public T getIfUnique() {
+                return null;
+            }
+        };
+    }
+
+    private String resolveActor() {
+        OperatorScopeService scope = operatorScope.getIfAvailable();
+        if (scope != null) {
+            return scope.requireActor();
+        }
+        return dutyAuth.currentUsername();
+    }
+
+    private void audit(String type, String title, String detail) {
+        OpsAuditService audit = opsAudit.getIfAvailable();
+        if (audit != null) {
+            audit.record(type, title, detail);
+        }
     }
 
     public ScopeGateParamsView getView(LimitScopeType type, String scopeKey) {
@@ -72,8 +131,7 @@ public class ScopeGateService {
                 throw new BusinessException("比赛不存在: " + key);
             }
         }
-        String by = req.operatorId() != null && !req.operatorId().isBlank()
-                ? req.operatorId() : dutyAuth.currentUsername();
+        String by = resolveActor();
         ScopeGateOverride next = new ScopeGateOverride(
                 type, key,
                 req.tradingEnabled(),
@@ -84,11 +142,17 @@ public class ScopeGateService {
         if (!next.hasAny()) {
             store.delete(type, key);
             log.info("Cleared scope gates {}/{} by={}", type, key, by);
+            audit(OpsAuditService.DUTY_GATE_CLEAR, "清除闸门 " + type + "/" + key, "by=" + by);
         } else {
             store.put(next);
             log.info("Saved scope gates {}/{} trading={} limit={} exposure={} by={}",
                     type, key, next.tradingEnabled(), next.limitGateEnabled(),
                     next.exposureGateEnabled(), by);
+            audit(OpsAuditService.DUTY_GATE_UPSERT, "更新闸门 " + type + "/" + key,
+                    "trading=" + next.tradingEnabled()
+                            + " limit=" + next.limitGateEnabled()
+                            + " exposure=" + next.exposureGateEnabled()
+                            + " by=" + by);
         }
         syncTradingStatus(type, key, next.tradingEnabled());
         configDispatch.afterScopeWrite(type, key);
@@ -98,8 +162,10 @@ public class ScopeGateService {
     public ScopeGateParamsView clear(LimitScopeType type, String scopeKey) {
         dutyAuth.requireWrite(type);
         String key = ScopeGateOverride.normalizeKey(type, scopeKey);
+        String by = resolveActor();
         store.delete(type, key);
-        log.info("Cleared scope gates {}/{}", type, key);
+        log.info("Cleared scope gates {}/{} by={}", type, key, by);
+        audit(OpsAuditService.DUTY_GATE_CLEAR, "清除闸门 " + type + "/" + key, "by=" + by);
         configDispatch.afterScopeWrite(type, key);
         return getView(type, key);
     }

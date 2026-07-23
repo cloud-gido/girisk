@@ -1,7 +1,9 @@
 package com.girisk.config;
 
 import com.girisk.auth.JwtTokenProvider;
+import com.girisk.auth.TokenRevocationStore;
 import com.girisk.auth.rbac.RbacService;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -25,14 +28,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RbacService rbacService;
+    private final TokenRevocationStore revocationStore;
     private final String internalApiKey;
 
     public JwtAuthFilter(
             JwtTokenProvider jwtTokenProvider,
             RbacService rbacService,
+            TokenRevocationStore revocationStore,
             @Value("${girisk.internal-api-key}") String internalApiKey) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.rbacService = rbacService;
+        this.revocationStore = revocationStore;
         this.internalApiKey = internalApiKey;
     }
 
@@ -53,7 +59,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (header != null && header.startsWith("Bearer ")) {
             try {
-                var claims = jwtTokenProvider.parse(header.substring(7));
+                Claims claims = jwtTokenProvider.parse(header.substring(7));
+                Instant issuedAt = claims.getIssuedAt() != null ? claims.getIssuedAt().toInstant() : null;
+                if (revocationStore.isRevoked(claims.getId(), claims.getSubject(), issuedAt)) {
+                    SecurityContextHolder.clearContext();
+                    chain.doFilter(request, response);
+                    return;
+                }
                 Set<String> authorityNames = new LinkedHashSet<>();
                 for (String role : jwtTokenProvider.rolesFromClaims(claims)) {
                     authorityNames.add("ROLE_" + role);

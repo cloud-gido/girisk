@@ -31,6 +31,7 @@ export const RISK_NAVIGATION: NavEntry[] = [
       { key: '/girisk/exposure', label: '敞口看板', icon: <FundProjectionScreenOutlined />, requiredPerm: Perm.MONITOR_READ },
       { key: '/girisk/decisions', label: '决策中心', icon: <AuditOutlined />, requiredPerm: Perm.AUDIT_READ },
       { key: '/girisk/replay', label: '风险回放', icon: <HistoryOutlined />, requiredPerm: Perm.AUDIT_READ },
+      { key: '/girisk/ops-audit', label: '操作审计', icon: <FileSearchOutlined />, requiredPerm: Perm.AUDIT_READ },
     ],
   },
   {

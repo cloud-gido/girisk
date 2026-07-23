@@ -1,10 +1,13 @@
 package com.girisk.sports.service;
 
+import com.girisk.audit.OpsAuditService;
+import com.girisk.auth.OperatorScopeService;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.sports.dto.SportsMatchView;
 import com.girisk.sports.model.LimitScopeType;
 import com.girisk.sports.model.ScopeLimitOverride;
 import com.girisk.sports.repository.SportsMatchRepository;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -21,16 +24,37 @@ public class SportsMatchStatusService {
     private final SportsExposureService exposureService;
     private final ScopeGateService scopeGateService;
     private final ScopeDutyAuth dutyAuth;
+    private final ObjectProvider<OperatorScopeService> operatorScope;
+    private final ObjectProvider<OpsAuditService> opsAudit;
 
     public SportsMatchStatusService(
             SportsMatchRepository matchRepository,
             SportsExposureService exposureService,
             ScopeGateService scopeGateService,
-            ScopeDutyAuth dutyAuth) {
+            ScopeDutyAuth dutyAuth,
+            ObjectProvider<OperatorScopeService> operatorScope,
+            ObjectProvider<OpsAuditService> opsAudit) {
         this.matchRepository = matchRepository;
         this.exposureService = exposureService;
         this.scopeGateService = scopeGateService;
         this.dutyAuth = dutyAuth;
+        this.operatorScope = operatorScope;
+        this.opsAudit = opsAudit;
+    }
+
+    private String resolveActor() {
+        OperatorScopeService scope = operatorScope.getIfAvailable();
+        if (scope != null) {
+            return scope.requireActor();
+        }
+        return dutyAuth.currentUsername();
+    }
+
+    private void audit(String title, String detail) {
+        OpsAuditService a = opsAudit.getIfAvailable();
+        if (a != null) {
+            a.record(OpsAuditService.DUTY_MATCH_STATUS, title, detail);
+        }
     }
 
     public SportsMatchView setStatus(String matchCode, String status) {
@@ -42,9 +66,11 @@ public class SportsMatchStatusService {
             throw new BusinessException("比赛不存在: " + matchCode);
         }
         String normalized = normalizeStatus(status);
+        String by = resolveActor();
         matchRepository.updateStatus(matchCode, normalized);
         scopeGateService.mirrorTrading(
-                LimitScopeType.MATCH, matchCode, "ACTIVE".equals(normalized), dutyAuth.currentUsername());
+                LimitScopeType.MATCH, matchCode, "ACTIVE".equals(normalized), by);
+        audit("赛事状态 " + matchCode + " → " + normalized, "by=" + by);
         return exposureService.getMatchView(matchCode);
     }
 
@@ -54,6 +80,7 @@ public class SportsMatchStatusService {
     public Map<String, Object> setScopeStatus(LimitScopeType type, String scopeKey, String status) {
         dutyAuth.requireWrite(type);
         String normalized = normalizeStatus(status);
+        String by = resolveActor();
         int updated;
         String sport = null;
         String league = null;
@@ -81,7 +108,8 @@ public class SportsMatchStatusService {
             case MATCH -> throw new BusinessException("赛事停盘请用 POST /matches/{matchCode}/status");
             default -> throw new BusinessException("未知 scopeType");
         }
-        scopeGateService.mirrorTrading(type, key, "ACTIVE".equals(normalized), dutyAuth.currentUsername());
+        scopeGateService.mirrorTrading(type, key, "ACTIVE".equals(normalized), by);
+        audit("批量状态 " + type + "/" + key + " → " + normalized, "updated=" + updated + " by=" + by);
         int total = matchRepository.countAll(sport, league);
         int suspended = matchRepository.countByStatus(sport, league, "SUSPENDED");
         Map<String, Object> out = new LinkedHashMap<>();

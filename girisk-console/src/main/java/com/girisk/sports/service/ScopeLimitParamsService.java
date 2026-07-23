@@ -1,5 +1,7 @@
 package com.girisk.sports.service;
 
+import com.girisk.audit.OpsAuditService;
+import com.girisk.auth.OperatorScopeService;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.config.SportsRiskProperties;
 import com.girisk.sports.dto.FixtureLimitOverrideRequest;
@@ -11,6 +13,8 @@ import com.girisk.sports.store.FixtureLimitOverrideStore;
 import com.girisk.sports.store.ScopeLimitOverrideStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -31,6 +35,26 @@ public class ScopeLimitParamsService {
     private final SportsRiskProperties props;
     private final ScopeDutyAuth dutyAuth;
     private final ScopeRiskConfigDispatchService configDispatch;
+    private final ObjectProvider<OperatorScopeService> operatorScope;
+    private final ObjectProvider<OpsAuditService> opsAudit;
+
+    @Autowired
+    public ScopeLimitParamsService(
+            ScopeLimitOverrideStore scopeStore,
+            FixtureLimitOverrideStore fixtureStore,
+            SportsRiskProperties props,
+            ScopeDutyAuth dutyAuth,
+            ScopeRiskConfigDispatchService configDispatch,
+            ObjectProvider<OperatorScopeService> operatorScope,
+            ObjectProvider<OpsAuditService> opsAudit) {
+        this.scopeStore = scopeStore;
+        this.fixtureStore = fixtureStore;
+        this.props = props;
+        this.dutyAuth = dutyAuth;
+        this.configDispatch = configDispatch;
+        this.operatorScope = operatorScope;
+        this.opsAudit = opsAudit;
+    }
 
     public ScopeLimitParamsService(
             ScopeLimitOverrideStore scopeStore,
@@ -38,11 +62,46 @@ public class ScopeLimitParamsService {
             SportsRiskProperties props,
             ScopeDutyAuth dutyAuth,
             ScopeRiskConfigDispatchService configDispatch) {
-        this.scopeStore = scopeStore;
-        this.fixtureStore = fixtureStore;
-        this.props = props;
-        this.dutyAuth = dutyAuth;
-        this.configDispatch = configDispatch;
+        this(scopeStore, fixtureStore, props, dutyAuth, configDispatch, emptyProvider(), emptyProvider());
+    }
+
+    private static <T> ObjectProvider<T> emptyProvider() {
+        return new ObjectProvider<>() {
+            @Override
+            public T getObject() {
+                return null;
+            }
+
+            @Override
+            public T getObject(Object... args) {
+                return null;
+            }
+
+            @Override
+            public T getIfAvailable() {
+                return null;
+            }
+
+            @Override
+            public T getIfUnique() {
+                return null;
+            }
+        };
+    }
+
+    private String resolveActor() {
+        OperatorScopeService scope = operatorScope.getIfAvailable();
+        if (scope != null) {
+            return scope.requireActor();
+        }
+        return dutyAuth.currentUsername();
+    }
+
+    private void audit(String type, String title, String detail) {
+        OpsAuditService a = opsAudit.getIfAvailable();
+        if (a != null) {
+            a.record(type, title, detail);
+        }
     }
 
     public ScopeLimitParamsView getView(LimitScopeType type, String scopeKey) {
@@ -66,6 +125,7 @@ public class ScopeLimitParamsService {
         }
         validate(req);
         String key = normalizeKey(type, scopeKey);
+        String by = resolveActor();
         ScopeLimitOverride next = new ScopeLimitOverride(
                 type,
                 key,
@@ -73,14 +133,21 @@ public class ScopeLimitParamsService {
                 req.seedPayoutYuan(),
                 req.maxWorstLossYuan(),
                 req.maxBetPayoutYuan(),
-                req.operatorId() != null && !req.operatorId().isBlank() ? req.operatorId() : "trader",
+                by,
                 Instant.now());
         if (!next.hasAny()) {
             scopeStore.delete(type, key);
             log.info("Cleared scope limit override {}/{}", type, key);
+            audit(OpsAuditService.DUTY_LIMIT_CLEAR, "清除限额 " + type + "/" + key, "by=" + by);
         } else {
             scopeStore.put(next);
             log.info("Saved scope limit override {}/{} by={}", type, key, next.updatedBy());
+            audit(OpsAuditService.DUTY_LIMIT_UPSERT, "更新限额 " + type + "/" + key,
+                    "delta=" + next.delta()
+                            + " seed=" + next.seedPayoutYuan()
+                            + " maxWorst=" + next.maxWorstLossYuan()
+                            + " maxBet=" + next.maxBetPayoutYuan()
+                            + " by=" + by);
         }
         configDispatch.afterScopeWrite(type, key);
         return getView(type, key);
@@ -92,7 +159,9 @@ public class ScopeLimitParamsService {
         }
         dutyAuth.requireWrite(type);
         String key = normalizeKey(type, scopeKey);
+        String by = resolveActor();
         scopeStore.delete(type, key);
+        audit(OpsAuditService.DUTY_LIMIT_CLEAR, "清除限额 " + type + "/" + key, "by=" + by);
         configDispatch.afterScopeWrite(type, key);
         return getView(type, key);
     }

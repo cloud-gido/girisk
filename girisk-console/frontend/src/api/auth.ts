@@ -9,6 +9,7 @@ export type AuthPayload = {
   role: string;
   roles?: string[];
   permissions?: string[];
+  operatorScope?: string;
 };
 
 export async function login(username: string, password: string) {
@@ -27,10 +28,20 @@ export async function login(username: string, password: string) {
     d.displayName,
     d.roles ?? [d.role],
     d.permissions ?? [],
+    d.operatorScope ?? '*',
   );
   return d;
 }
 
 export function me() {
   return request<SessionUser>('/auth/me');
+}
+
+/** 服务端吊销 jti；失败也清本地会话 */
+export async function logout() {
+  try {
+    await request('/auth/logout', { method: 'POST' });
+  } catch {
+    // ignore
+  }
 }

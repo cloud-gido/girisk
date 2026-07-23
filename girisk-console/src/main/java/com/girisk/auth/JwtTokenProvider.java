@@ -14,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -23,7 +24,7 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(
             @Value("${girisk.jwt.secret}") String secret,
-            @Value("${girisk.jwt.expiry-hours}") long expiryHours) {
+            @Value("${girisk.jwt.expiry-hours:8}") long expiryHours) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expiryHours = expiryHours;
     }
@@ -33,12 +34,15 @@ public class JwtTokenProvider {
         List<String> roleList = roles == null ? List.of() : List.copyOf(roles);
         List<String> permList = permissions == null ? List.of() : List.copyOf(permissions);
         String primary = roleList.isEmpty() ? user.role() : roleList.get(0);
+        String scope = user.operatorScope() == null || user.operatorScope().isBlank() ? "*" : user.operatorScope();
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(user.username())
                 .claim("role", primary)
                 .claim("roles", roleList)
                 .claim("perms", permList)
                 .claim("displayName", user.displayName())
+                .claim("operatorScope", scope)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiryHours, ChronoUnit.HOURS)))
                 .signWith(key)
@@ -49,7 +53,6 @@ public class JwtTokenProvider {
         return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
     }
 
-    @SuppressWarnings("unchecked")
     public List<String> rolesFromClaims(Claims claims) {
         Object raw = claims.get("roles");
         if (raw instanceof List<?> list && !list.isEmpty()) {
@@ -59,7 +62,6 @@ public class JwtTokenProvider {
         return role == null || role.isBlank() ? List.of() : List.of(role);
     }
 
-    @SuppressWarnings("unchecked")
     public List<String> permsFromClaims(Claims claims) {
         Object raw = claims.get("perms");
         if (raw instanceof List<?> list) {

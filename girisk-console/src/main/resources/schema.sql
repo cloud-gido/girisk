@@ -82,8 +82,12 @@ CREATE TABLE IF NOT EXISTS sys_user (
     display_name    VARCHAR(64)  NOT NULL,
     role            VARCHAR(32)  NOT NULL,
     enabled         BOOLEAN      NOT NULL DEFAULT TRUE,
+    operator_scope  VARCHAR(512) NOT NULL DEFAULT '*',
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 已有库补列（H2/PG 均兼容；失败时由 continue-on-error 忽略）
+ALTER TABLE sys_user ADD COLUMN IF NOT EXISTS operator_scope VARCHAR(512) DEFAULT '*';
 
 -- RBAC：用户 → 角色 → 权限（sys_user.role 保留为主角色展示/兼容）
 CREATE TABLE IF NOT EXISTS sys_role (

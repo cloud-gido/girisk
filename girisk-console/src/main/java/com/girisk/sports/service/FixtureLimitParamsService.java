@@ -1,6 +1,8 @@
 package com.girisk.sports.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.girisk.audit.OpsAuditService;
+import com.girisk.auth.OperatorScopeService;
 import com.girisk.common.exception.BusinessException;
 import com.girisk.config.SportsRiskProperties;
 import com.girisk.sports.dto.FixtureLimitOverrideRequest;
@@ -12,6 +14,7 @@ import com.girisk.sports.store.FixtureLimitOverrideStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +37,30 @@ public class FixtureLimitParamsService {
     private final ScopeDutyAuth dutyAuth;
     private final ScopeRiskConfigDispatchService configDispatch;
     private final StringRedisTemplate redis;
+    private final ObjectProvider<OperatorScopeService> operatorScope;
+    private final ObjectProvider<OpsAuditService> opsAudit;
+
+    @Autowired
+    public FixtureLimitParamsService(
+            SportsMatchRepository matchRepository,
+            FixtureLimitOverrideStore overrideStore,
+            ScopeLimitParamsService scopeLimitParamsService,
+            SportsRiskProperties props,
+            ScopeDutyAuth dutyAuth,
+            ScopeRiskConfigDispatchService configDispatch,
+            ObjectProvider<StringRedisTemplate> redis,
+            ObjectProvider<OperatorScopeService> operatorScope,
+            ObjectProvider<OpsAuditService> opsAudit) {
+        this.matchRepository = matchRepository;
+        this.overrideStore = overrideStore;
+        this.scopeLimitParamsService = scopeLimitParamsService;
+        this.props = props;
+        this.dutyAuth = dutyAuth;
+        this.configDispatch = configDispatch;
+        this.redis = redis.getIfAvailable();
+        this.operatorScope = operatorScope;
+        this.opsAudit = opsAudit;
+    }
 
     public FixtureLimitParamsService(
             SportsMatchRepository matchRepository,
@@ -43,13 +70,47 @@ public class FixtureLimitParamsService {
             ScopeDutyAuth dutyAuth,
             ScopeRiskConfigDispatchService configDispatch,
             ObjectProvider<StringRedisTemplate> redis) {
-        this.matchRepository = matchRepository;
-        this.overrideStore = overrideStore;
-        this.scopeLimitParamsService = scopeLimitParamsService;
-        this.props = props;
-        this.dutyAuth = dutyAuth;
-        this.configDispatch = configDispatch;
-        this.redis = redis.getIfAvailable();
+        this(matchRepository, overrideStore, scopeLimitParamsService, props, dutyAuth, configDispatch,
+                redis, emptyProvider(), emptyProvider());
+    }
+
+    private static <T> ObjectProvider<T> emptyProvider() {
+        return new ObjectProvider<>() {
+            @Override
+            public T getObject() {
+                return null;
+            }
+
+            @Override
+            public T getObject(Object... args) {
+                return null;
+            }
+
+            @Override
+            public T getIfAvailable() {
+                return null;
+            }
+
+            @Override
+            public T getIfUnique() {
+                return null;
+            }
+        };
+    }
+
+    private String resolveActor() {
+        OperatorScopeService scope = operatorScope.getIfAvailable();
+        if (scope != null) {
+            return scope.requireActor();
+        }
+        return dutyAuth.currentUsername();
+    }
+
+    private void audit(String type, String title, String detail) {
+        OpsAuditService a = opsAudit.getIfAvailable();
+        if (a != null) {
+            a.record(type, title, detail);
+        }
     }
 
     /** 解析本场有效参数：总体 → 球类 → 联赛 → 赛事覆盖。 */
@@ -110,12 +171,13 @@ public class FixtureLimitParamsService {
                 req.seedPayoutYuan(),
                 req.maxWorstLossYuan(),
                 req.maxBetPayoutYuan(),
-                req.operatorId() != null && !req.operatorId().isBlank() ? req.operatorId() : "trader",
+                resolveActor(),
                 Instant.now());
 
         if (!next.hasAny()) {
             overrideStore.delete(matchCode);
             log.info("Cleared fixture limit override match={}", matchCode);
+            audit(OpsAuditService.DUTY_FIXTURE_LIMIT, "清除赛事限额 " + matchCode, "by=" + next.updatedBy());
         } else {
             overrideStore.put(next);
             // 同步 δ / 敞口阈值到赛事库，看板与其它读库路径一致
@@ -129,6 +191,12 @@ public class FixtureLimitParamsService {
             log.info("Saved fixture limit override match={} by={} delta={} seed={} maxWorst={} maxBet={}",
                     matchCode, next.updatedBy(), next.delta(), next.seedPayoutYuan(),
                     next.maxWorstLossYuan(), next.maxBetPayoutYuan());
+            audit(OpsAuditService.DUTY_FIXTURE_LIMIT, "更新赛事限额 " + matchCode,
+                    "delta=" + next.delta()
+                            + " seed=" + next.seedPayoutYuan()
+                            + " maxWorst=" + next.maxWorstLossYuan()
+                            + " maxBet=" + next.maxBetPayoutYuan()
+                            + " by=" + next.updatedBy());
         }
 
         configDispatch.afterScopeWrite(com.girisk.sports.model.LimitScopeType.MATCH, matchCode);
@@ -141,8 +209,10 @@ public class FixtureLimitParamsService {
         dutyAuth.requireWrite(com.girisk.sports.model.LimitScopeType.MATCH);
         matchRepository.findByCode(matchCode)
                 .orElseThrow(() -> new BusinessException("比赛不存在: " + matchCode));
+        String by = resolveActor();
         overrideStore.delete(matchCode);
-        log.info("Cleared fixture limit override match={}", matchCode);
+        log.info("Cleared fixture limit override match={} by={}", matchCode, by);
+        audit(OpsAuditService.DUTY_FIXTURE_LIMIT, "清除赛事限额 " + matchCode, "by=" + by);
         configDispatch.afterScopeWrite(com.girisk.sports.model.LimitScopeType.MATCH, matchCode);
         EffectiveParams effective = resolve(matchCode);
         patchFixtureViewReplayStats(matchCode, effective);

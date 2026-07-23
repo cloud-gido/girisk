@@ -1,5 +1,6 @@
 package com.girisk.auth;
 
+import com.girisk.audit.OpsAuditService;
 import com.girisk.auth.dto.CreateUserRequest;
 import com.girisk.auth.dto.IamRoleView;
 import com.girisk.auth.dto.IamUserView;
@@ -28,16 +29,22 @@ public class IamService {
     private final RbacRepository rbacRepository;
     private final RbacService rbacService;
     private final PasswordEncoder passwordEncoder;
+    private final OpsAuditService opsAudit;
+    private final TokenRevocationStore revocationStore;
 
     public IamService(
             UserRepository userRepository,
             RbacRepository rbacRepository,
             RbacService rbacService,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            OpsAuditService opsAudit,
+            TokenRevocationStore revocationStore) {
         this.userRepository = userRepository;
         this.rbacRepository = rbacRepository;
         this.rbacService = rbacService;
         this.passwordEncoder = passwordEncoder;
+        this.opsAudit = opsAudit;
+        this.revocationStore = revocationStore;
     }
 
     public List<IamUserView> listUsers() {
@@ -56,12 +63,18 @@ public class IamService {
         }
         String primary = normalizeRole(req.role());
         List<String> roles = resolveRoleCodes(primary, req.roles());
+        String scope = normalizeScope(req.operatorScope());
         long id = userRepository.insert(
                 req.username().trim(),
                 passwordEncoder.encode(req.password()),
                 req.displayName().trim(),
-                primary);
+                primary,
+                scope);
         bindRoles(id, roles);
+        opsAudit.record(
+                OpsAuditService.IAM_USER_CREATE,
+                "创建用户 " + req.username(),
+                "role=" + primary + " scope=" + scope + " roles=" + roles);
         return getUser(id);
     }
 
@@ -70,25 +83,41 @@ public class IamService {
         SysUser user = userRepository.findById(id).orElseThrow(() -> new BusinessException("用户不存在"));
         String primary = normalizeRole(req.role());
         boolean enabled = req.enabled() == null ? user.enabled() : req.enabled();
-        userRepository.updateProfile(id, req.displayName().trim(), primary, enabled);
+        String scope = req.operatorScope() != null ? normalizeScope(req.operatorScope()) : user.operatorScope();
+        userRepository.updateProfile(id, req.displayName().trim(), primary, enabled, scope);
         List<String> roles = resolveRoleCodes(primary, req.roles());
         bindRoles(id, roles);
+        if (!enabled) {
+            revocationStore.invalidateUser(user.username());
+        }
+        opsAudit.record(
+                OpsAuditService.IAM_USER_UPDATE,
+                "更新用户 " + user.username(),
+                "role=" + primary + " enabled=" + enabled + " scope=" + scope + " roles=" + roles);
         return getUser(id);
     }
 
     public IamUserView setEnabled(long id, boolean enabled) {
-        if (userRepository.findById(id).isEmpty()) {
-            throw new BusinessException("用户不存在");
-        }
+        SysUser user = userRepository.findById(id).orElseThrow(() -> new BusinessException("用户不存在"));
         userRepository.setEnabled(id, enabled);
+        if (!enabled) {
+            revocationStore.invalidateUser(user.username());
+        }
+        opsAudit.record(
+                OpsAuditService.IAM_USER_ENABLE,
+                (enabled ? "启用" : "停用") + "用户 " + user.username(),
+                "enabled=" + enabled);
         return getUser(id);
     }
 
     public void resetPassword(long id, ResetPasswordRequest req) {
-        if (userRepository.findById(id).isEmpty()) {
-            throw new BusinessException("用户不存在");
-        }
+        SysUser user = userRepository.findById(id).orElseThrow(() -> new BusinessException("用户不存在"));
         userRepository.updatePassword(id, passwordEncoder.encode(req.password()));
+        revocationStore.invalidateUser(user.username());
+        opsAudit.record(
+                OpsAuditService.IAM_PASSWORD_RESET,
+                "重置密码 " + user.username(),
+                "userId=" + id);
     }
 
     public List<IamRoleView> listRoles() {
@@ -103,8 +132,8 @@ public class IamService {
     public IamRoleView updateRolePermissions(long roleId, UpdateRolePermissionsRequest req) {
         SysRole role = rbacRepository.findRoleById(roleId).orElseThrow(() -> new BusinessException("角色不存在"));
         if (role.builtin() && RbacPermissions.ROLE_ADMIN.equals(role.code())) {
-            // ADMIN 始终全权限，忽略缩减
             bindRoleAllPermissions(role.id());
+            opsAudit.record(OpsAuditService.IAM_ROLE_PERMS, "角色权限 " + role.code(), "forced=ALL");
             return toRoleView(role);
         }
         List<Long> permIds = new ArrayList<>();
@@ -115,6 +144,10 @@ public class IamService {
                     });
         }
         rbacRepository.replaceRolePermissions(role.id(), permIds);
+        opsAudit.record(
+                OpsAuditService.IAM_ROLE_PERMS,
+                "角色权限 " + role.code(),
+                "permissions=" + req.permissions());
         return toRoleView(role);
     }
 
@@ -154,6 +187,13 @@ public class IamService {
         return code;
     }
 
+    private static String normalizeScope(String scope) {
+        if (scope == null || scope.isBlank()) {
+            return "*";
+        }
+        return scope.trim();
+    }
+
     private IamUserView toUserView(SysUser user) {
         List<String> roles = rbacService.rolesForUser(user);
         List<String> perms = rbacService.permissionsForUser(user);
@@ -166,6 +206,7 @@ public class IamService {
                 user.enabled(),
                 roles,
                 perms,
+                user.operatorScope(),
                 user.createdAt() == null ? null : user.createdAt().toString());
     }
 
