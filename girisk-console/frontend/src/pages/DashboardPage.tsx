@@ -77,30 +77,45 @@ export default function DashboardPage() {
         <h2>总览</h2>
         <p>统一决策态势 · 赛事敞口 · 配置版本 · 审核积压</p>
       </div>
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="dashboard-stat-row">
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic title="总决策数" value={data?.totalDecisions} prefix={<ThunderboltOutlined />} valueStyle={{ color: '#1677ff' }} />
-          </Card>
+          <StatLinkCard
+            title="总决策数"
+            value={data?.totalDecisions ?? 0}
+            prefix={<ThunderboltOutlined />}
+            valueStyle={{ color: '#1677ff' }}
+          />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic title="通过率" value={data?.totalDecisions ? Math.round((data.passCount / data.totalDecisions) * 100) : 0} suffix="%" prefix={<CheckCircleOutlined />} valueStyle={{ color: '#52c41a' }} />
-          </Card>
+          <StatLinkCard
+            title="通过率"
+            value={data?.totalDecisions ? Math.round((data.passCount / data.totalDecisions) * 100) : 0}
+            suffix="%"
+            prefix={<CheckCircleOutlined />}
+            valueStyle={{ color: '#52c41a' }}
+          />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic title="拒绝 / 限额" value={`${data?.rejectCount ?? 0} / ${data?.limitCount ?? 0}`} prefix={<CloseCircleOutlined />} valueStyle={{ color: '#ff4d4f' }} />
-          </Card>
+          <StatLinkCard
+            title="拒绝 / 限额"
+            value={`${data?.rejectCount ?? 0} / ${data?.limitCount ?? 0}`}
+            prefix={<CloseCircleOutlined />}
+            valueStyle={{ color: '#ff4d4f' }}
+          />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card" hoverable onClick={() => navigate('/girisk/cases')}>
-            <Statistic title="待审工单" value={data?.pendingCases} prefix={<ClockCircleOutlined />} valueStyle={{ color: '#faad14' }} />
-          </Card>
+          <StatLinkCard
+            title="待审工单"
+            value={data?.pendingCases ?? 0}
+            prefix={<ClockCircleOutlined />}
+            valueStyle={{ color: '#faad14' }}
+            to="/girisk/cases"
+            hint="进入审核工单"
+          />
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} className="dashboard-stat-row" style={{ marginTop: 16 }}>
         <Col xs={24} sm={12} lg={6}>
           <StatLinkCard
             title="超额盘口"
@@ -120,18 +135,23 @@ export default function DashboardPage() {
           />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic title="生产配置 Epoch" value={data?.publishedConfigEpoch ?? 0} />
-          </Card>
+          <StatLinkCard
+            title="生产配置 Epoch"
+            value={data?.publishedConfigEpoch ?? 0}
+            to="/girisk/config"
+            hint="打开配置中心"
+          />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <Card className="stat-card">
-            <Statistic title="平均延迟" value={data?.avgLatencyMs} suffix="ms" />
-          </Card>
+          <StatLinkCard
+            title="平均延迟"
+            value={data?.avgLatencyMs ?? 0}
+            suffix="ms"
+          />
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+      <Row gutter={[16, 16]} className="dashboard-panel-row" style={{ marginTop: 16 }}>
         <Col xs={24} lg={8}>
           <Card className="content-card" title="决策分布">
             <Pie data={pieData} angleField="value" colorField="type" radius={0.8} innerRadius={0.5} height={260} legend={{ position: 'bottom' }} />

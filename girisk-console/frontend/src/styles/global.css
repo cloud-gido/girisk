@@ -34,6 +34,19 @@ body {
   border-radius: 12px !important;
   border: none !important;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
+  height: 100%;
+  width: 100%;
+}
+
+.stat-card-link-wrap {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+}
+
+.stat-card-link-wrap .stat-card {
+  flex: 1;
 }
 
 .stat-card-link {
@@ -48,11 +61,43 @@ body {
 
 .stat-card-foot {
   margin-top: 12px;
+  min-height: 18px;
   font-size: 12px;
   color: #8c8c8c;
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.stat-card-foot--empty {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 总览指标 / 下方面板：同排等高 */
+.dashboard-stat-row > .ant-col {
+  display: flex;
+}
+
+.dashboard-stat-row > .ant-col > * {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-panel-row > .ant-col {
+  display: flex;
+}
+
+.dashboard-panel-row .content-card {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-panel-row .content-card .ant-card-body {
+  flex: 1;
 }
 
 .content-card {
