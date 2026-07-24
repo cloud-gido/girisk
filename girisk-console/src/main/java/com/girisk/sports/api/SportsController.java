@@ -10,6 +10,8 @@ import com.girisk.sports.dto.FixtureLimitParamsView;
 import com.girisk.sports.dto.SportsDashboardSummary;
 import com.girisk.sports.dto.SportsBetEvaluateRequest;
 import com.girisk.sports.dto.SportsBetEvaluateResponse;
+import com.girisk.sports.dto.SportsMatchListRow;
+import com.girisk.sports.dto.SportsMatchMetaRequest;
 import com.girisk.sports.dto.SportsMatchView;
 import com.girisk.sports.model.SportsBetLog;
 import com.girisk.sports.model.SportsMatch;
@@ -130,8 +132,24 @@ public class SportsController {
     }
 
     @GetMapping("/matches")
-    public ApiResponse<List<SportsMatch>> listMatches() {
-        return ApiResponse.ok(exposureService.listMatches());
+    public ApiResponse<List<SportsMatchListRow>> listMatches(
+            @RequestParam(required = false) String sportCode,
+            @RequestParam(required = false) String leagueCode,
+            @RequestParam(required = false) String matchCode,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Boolean limitMode,
+            @RequestParam(required = false) String gateOff) {
+        return ApiResponse.ok(exposureService.listMatchRows(
+                sportCode, leagueCode, matchCode, q, status, limitMode, gateOff));
+    }
+
+    @PatchMapping("/matches/{matchCode}/meta")
+    public ApiResponse<SportsMatchView> updateMatchMeta(
+            @PathVariable String matchCode,
+            @RequestBody SportsMatchMetaRequest body) {
+        dutyAuth.requireWrite(LimitScopeType.MATCH);
+        return ApiResponse.ok(exposureService.updateMeta(matchCode, body));
     }
 
     @GetMapping("/matches/{matchCode}")

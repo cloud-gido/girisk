@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,11 +16,11 @@ public class SportsMatchRepository {
     private static final RowMapper<SportsMatch> MAPPER = (rs, i) -> new SportsMatch(
             rs.getLong("id"),
             rs.getString("match_code"),
-            rs.getString("home_team"),
-            rs.getString("away_team"),
-            columnOr(rs, "sport_code", "football"),
-            columnOr(rs, "league_code", "UNKNOWN"),
-            columnOr(rs, "league_name", "未分组联赛"),
+            blankToNull(rs.getString("home_team")),
+            blankToNull(rs.getString("away_team")),
+            blankToNull(rs.getString("sport_code")),
+            blankToNull(rs.getString("league_code")),
+            blankToNull(rs.getString("league_name")),
             rs.getBigDecimal("exposure_threshold"),
             rs.getBoolean("limit_mode"),
             rs.getBigDecimal("current_exposure"),
@@ -30,13 +31,8 @@ public class SportsMatchRepository {
             rs.getTimestamp("updated_at").toLocalDateTime()
     );
 
-    private static String columnOr(java.sql.ResultSet rs, String col, String fallback) {
-        try {
-            String v = rs.getString(col);
-            return v == null || v.isBlank() ? fallback : v;
-        } catch (Exception e) {
-            return fallback;
-        }
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v;
     }
 
     private final JdbcTemplate jdbc;
@@ -46,11 +42,60 @@ public class SportsMatchRepository {
     }
 
     public List<SportsMatch> findAll() {
-        return jdbc.query("SELECT * FROM sports_match ORDER BY id", MAPPER);
+        return jdbc.query("SELECT * FROM sports_match ORDER BY updated_at DESC, id DESC", MAPPER);
     }
 
     public List<SportsMatch> findActive() {
         return jdbc.query("SELECT * FROM sports_match WHERE status = 'ACTIVE' ORDER BY id", MAPPER);
+    }
+
+    /**
+     * 值班台筛选。空参数忽略。
+     * {@code q}：赛事 ID 前缀或对阵模糊；{@code matchCodePrefix}：仅 ID 前缀。
+     */
+    public List<SportsMatch> findFiltered(
+            String sportCode,
+            String leagueCode,
+            String matchCodePrefix,
+            String q,
+            String status,
+            Boolean limitMode) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM sports_match WHERE 1=1");
+        List<Object> args = new ArrayList<>();
+        if (sportCode != null && !sportCode.isBlank()) {
+            sql.append(" AND sport_code = ?");
+            args.add(sportCode.trim());
+        }
+        if (leagueCode != null && !leagueCode.isBlank()) {
+            sql.append(" AND (league_code = ? OR LOWER(COALESCE(league_name,'')) LIKE LOWER(?))");
+            String lc = leagueCode.trim();
+            args.add(lc);
+            args.add("%" + lc + "%");
+        }
+        if (matchCodePrefix != null && !matchCodePrefix.isBlank()) {
+            sql.append(" AND match_code LIKE ?");
+            args.add(matchCodePrefix.trim() + "%");
+        }
+        if (q != null && !q.isBlank()) {
+            String qq = q.trim();
+            sql.append(" AND (match_code LIKE ? OR LOWER(COALESCE(home_team,'')) LIKE LOWER(?)");
+            sql.append(" OR LOWER(COALESCE(away_team,'')) LIKE LOWER(?)");
+            sql.append(" OR LOWER(CONCAT(COALESCE(home_team,''), ' ', COALESCE(away_team,''))) LIKE LOWER(?))");
+            args.add(qq + "%");
+            args.add("%" + qq + "%");
+            args.add("%" + qq + "%");
+            args.add("%" + qq + "%");
+        }
+        if (status != null && !status.isBlank()) {
+            sql.append(" AND status = ?");
+            args.add(status.trim());
+        }
+        if (limitMode != null) {
+            sql.append(" AND limit_mode = ?");
+            args.add(limitMode);
+        }
+        sql.append(" ORDER BY updated_at DESC, id DESC");
+        return jdbc.query(sql.toString(), MAPPER, args.toArray());
     }
 
     public Optional<SportsMatch> findByCode(String matchCode) {
@@ -147,7 +192,11 @@ public class SportsMatchRepository {
             BigDecimal threshold, BigDecimal delta) {
         jdbc.update(
                 "INSERT INTO sports_match(match_code, home_team, away_team, sport_code, league_code, league_name, exposure_threshold, delta) VALUES(?,?,?,?,?,?,?,?)",
-                matchCode, home, away, sportCode, leagueCode, leagueName, threshold, delta);
+                matchCode, home, away,
+                sportCode == null || sportCode.isBlank() ? "football" : sportCode,
+                blankToNull(leagueCode),
+                blankToNull(leagueName),
+                threshold, delta);
         return findByCode(matchCode).map(SportsMatch::id).orElse(0L);
     }
 
@@ -162,5 +211,23 @@ public class SportsMatchRepository {
                 WHERE match_code=?
                 """,
                 home, away, sportCode, leagueCode, leagueName, threshold, delta, matchCode);
+    }
+
+    /** 仅展示元数据（队名/球类/联赛），阈值不动。 */
+    public void updateDisplayMeta(
+            String matchCode, String home, String away,
+            String sportCode, String leagueCode, String leagueName) {
+        jdbc.update(
+                """
+                UPDATE sports_match SET home_team=?, away_team=?, sport_code=?, league_code=?, league_name=?,
+                  updated_at=CURRENT_TIMESTAMP
+                WHERE match_code=?
+                """,
+                blankToNull(home),
+                blankToNull(away),
+                sportCode == null || sportCode.isBlank() ? "football" : sportCode.trim(),
+                blankToNull(leagueCode),
+                blankToNull(leagueName),
+                matchCode);
     }
 }

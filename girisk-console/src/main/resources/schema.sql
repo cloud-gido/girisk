@@ -212,11 +212,11 @@ CREATE INDEX IF NOT EXISTS idx_fixture_view_worst ON risk_fixture_view(worst_los
 CREATE TABLE IF NOT EXISTS sports_match (
     id                  BIGSERIAL PRIMARY KEY,
     match_code          VARCHAR(64)  NOT NULL UNIQUE,
-    home_team           VARCHAR(128) NOT NULL,
-    away_team           VARCHAR(128) NOT NULL,
+    home_team           VARCHAR(128),
+    away_team           VARCHAR(128),
     sport_code          VARCHAR(32)  NOT NULL DEFAULT 'football',
-    league_code         VARCHAR(64)  NOT NULL DEFAULT 'UNKNOWN',
-    league_name         VARCHAR(128) NOT NULL DEFAULT '未分组联赛',
+    league_code         VARCHAR(64)  DEFAULT 'UNKNOWN',
+    league_name         VARCHAR(128) DEFAULT '未分组联赛',
     exposure_threshold  DECIMAL(18,2) NOT NULL DEFAULT 50000,
     limit_mode          BOOLEAN      NOT NULL DEFAULT FALSE,
     current_exposure    DECIMAL(18,2) NOT NULL DEFAULT 0,
@@ -226,6 +226,12 @@ CREATE TABLE IF NOT EXISTS sports_match (
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 已有库：元数据允许留白（运营后续在页面补全）
+ALTER TABLE sports_match ALTER COLUMN home_team DROP NOT NULL;
+ALTER TABLE sports_match ALTER COLUMN away_team DROP NOT NULL;
+ALTER TABLE sports_match ALTER COLUMN league_code DROP NOT NULL;
+ALTER TABLE sports_match ALTER COLUMN league_name DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS sports_bet_log (
     id              BIGSERIAL PRIMARY KEY,

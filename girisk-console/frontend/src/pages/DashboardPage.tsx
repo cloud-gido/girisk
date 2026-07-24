@@ -1,7 +1,7 @@
 import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, FundProjectionScreenOutlined, ThunderboltOutlined,
 } from '@ant-design/icons';
-import { Card, Col, Row, Spin, Statistic, Table, Tag, message } from 'antd';
+import { Card, Col, Row, Spin, Statistic, Table, Tag } from 'antd';
 import { Pie } from '@ant-design/charts';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -40,12 +40,12 @@ export default function DashboardPage() {
 
   const resolveFixtureNav = (r: RiskFixtureView) => {
     const m = resolveMatchFromFixture(r, exposure?.matches ?? []);
-    if (!m) {
-      message.warning(`场次 ${r.fixtureId} 尚未接入敞口赛事库`);
-      navigate('/girisk/exposure');
+    if (m) {
+      navigate(buildExposureMatchUrl(m, { q: m.matchCode }));
       return;
     }
-    navigate(buildExposureMatchUrl(m));
+    // Flink 空壳会自动 sync；先按赛事 ID 打开工作台
+    navigate(`/girisk/exposure?level=match&q=${encodeURIComponent(r.fixtureId)}&match=${encodeURIComponent(r.fixtureId)}`);
   };
 
   const fixtureColumns = [

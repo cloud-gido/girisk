@@ -11,9 +11,11 @@ export function resolveMatchFromFixture(
 
 export function buildExposureMatchUrl(m: SportsMatch, extra?: Record<string, string | undefined>): string {
   const sp = new URLSearchParams();
+  sp.set('level', 'match');
   sp.set('sport', m.sportCode || 'football');
-  sp.set('league', m.leagueCode || 'UNKNOWN');
+  if (m.leagueCode) sp.set('league', m.leagueCode);
   sp.set('match', m.matchCode);
+  sp.set('q', m.matchCode);
   if (extra) {
     Object.entries(extra).forEach(([k, v]) => {
       if (v) sp.set(k, v);
@@ -28,13 +30,17 @@ export function buildExposurePath(parts: {
   match?: string;
   market?: string;
   filter?: string;
+  q?: string;
+  level?: string;
 }): string {
   const sp = new URLSearchParams();
+  if (parts.level) sp.set('level', parts.level);
   if (parts.sport) sp.set('sport', parts.sport);
   if (parts.league) sp.set('league', parts.league);
   if (parts.match) sp.set('match', parts.match);
   if (parts.market) sp.set('market', parts.market);
   if (parts.filter) sp.set('filter', parts.filter);
+  if (parts.q) sp.set('q', parts.q);
   const q = sp.toString();
   return q ? `/girisk/exposure?${q}` : '/girisk/exposure';
 }

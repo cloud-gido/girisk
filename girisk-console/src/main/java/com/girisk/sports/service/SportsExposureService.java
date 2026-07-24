@@ -4,11 +4,12 @@ import com.girisk.configcenter.model.RiskFixtureView;
 import com.girisk.flink.RedisFixtureViewReader;
 import com.girisk.sports.dto.OutcomeLimitRow;
 import com.girisk.sports.dto.SportsDashboardSummary;
+import com.girisk.sports.dto.SportsMatchListRow;
+import com.girisk.sports.dto.SportsMatchMetaRequest;
 import com.girisk.sports.dto.SportsMatchView;
 import com.girisk.sports.exposure.GroupLimitSnapshot;
 import com.girisk.sports.exposure.ProportionalLimitCalculator;
 import com.girisk.sports.model.MarketGroupKey;
-import com.girisk.sports.model.SportsMarketType;
 import com.girisk.sports.model.SportsMatch;
 import com.girisk.sports.repository.SportsMatchRepository;
 import com.girisk.sports.store.ExposureStore;
@@ -21,6 +22,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -32,23 +34,132 @@ public class SportsExposureService {
     private final ExposureStore exposureStore;
     private final FixtureLimitParamsService limitParamsService;
     private final RedisFixtureViewReader fixtureViewReader;
+    private final ScopeGateService scopeGateService;
+    private final SportsMatchSyncService matchSyncService;
 
     public SportsExposureService(
             SportsMatchRepository matchRepository,
             ExposureStore exposureStore,
             FixtureLimitParamsService limitParamsService,
-            RedisFixtureViewReader fixtureViewReader) {
+            RedisFixtureViewReader fixtureViewReader,
+            ScopeGateService scopeGateService,
+            SportsMatchSyncService matchSyncService) {
         this.matchRepository = matchRepository;
         this.exposureStore = exposureStore;
         this.limitParamsService = limitParamsService;
         this.fixtureViewReader = fixtureViewReader;
+        this.scopeGateService = scopeGateService;
+        this.matchSyncService = matchSyncService;
     }
 
     public List<SportsMatch> listMatches() {
+        matchSyncService.syncFromRedis();
         return matchRepository.findAll();
     }
 
+    /**
+     * 值班台列表：先 sync Redis 空壳，再筛选并 enrich 门控/限额/live。
+     *
+     * @param gateOff trading|limit|exposure — 筛出该开关为关的赛事
+     */
+    public List<SportsMatchListRow> listMatchRows(
+            String sportCode,
+            String leagueCode,
+            String matchCode,
+            String q,
+            String status,
+            Boolean limitMode,
+            String gateOff) {
+        matchSyncService.syncFromRedis();
+        List<SportsMatch> matches = matchRepository.findFiltered(
+                sportCode, leagueCode, matchCode, q, status, limitMode);
+        List<SportsMatchListRow> rows = new ArrayList<>(matches.size());
+        for (SportsMatch match : matches) {
+            SportsMatchListRow row = toListRow(match);
+            if (gateOff != null && !gateOff.isBlank() && !matchesGateOff(row, gateOff)) {
+                continue;
+            }
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private static boolean matchesGateOff(SportsMatchListRow row, String gateOff) {
+        String g = gateOff.trim().toLowerCase(Locale.ROOT);
+        return switch (g) {
+            case "trading" -> !row.tradingEnabled();
+            case "limit" -> !row.limitGateEnabled();
+            case "exposure" -> !row.exposureGateEnabled();
+            default -> true;
+        };
+    }
+
+    public SportsMatchListRow toListRow(SportsMatch match) {
+        FixtureLimitParamsService.EffectiveParams params = limitParamsService.resolve(match);
+        ScopeGateService.EffectiveGates gates = scopeGateService.resolveForMatch(match);
+        RiskFixtureView flink = fixtureViewReader.findByFixtureId(match.matchCode());
+
+        BigDecimal exposure = match.currentExposure() != null ? match.currentExposure() : BigDecimal.ZERO;
+        if (flink != null) {
+            List<SportsMatchView.MarketGroupView> groups = mapFlinkMarketGroups(flink.marketGroups());
+            BigDecimal fromGroups = sumGroupStakes(groups);
+            if (fromGroups.compareTo(BigDecimal.ZERO) > 0) {
+                exposure = fromGroups;
+            } else if (flink.replayStats() != null && flink.replayStats().get("acceptedStakeYuan") != null) {
+                exposure = toBd(flink.replayStats().get("acceptedStakeYuan"));
+            }
+        }
+
+        return new SportsMatchListRow(
+                match.id(),
+                match.matchCode(),
+                match.homeTeam(),
+                match.awayTeam(),
+                match.sportOrDefault(),
+                match.leagueCode(),
+                match.leagueName(),
+                params.maxWorstLossYuan(),
+                match.limitMode(),
+                exposure,
+                params.delta(),
+                params.seedPayoutYuan(),
+                params.maxWorstLossYuan(),
+                params.maxBetPayoutYuan(),
+                params.overrideActive(),
+                match.status(),
+                match.lastCheckAt(),
+                match.updatedAt(),
+                gates.tradingEnabled(),
+                gates.limitGateEnabled(),
+                gates.exposureGateEnabled(),
+                gates.tradingSource(),
+                gates.limitGateSource(),
+                gates.exposureGateSource(),
+                flink != null ? flink.liveScore() : null,
+                flink != null ? flink.worstScore() : null,
+                flink != null ? flink.worstLossCents() : null,
+                flink != null ? flink.riskLevel() : null,
+                flink != null ? flink.confirmedOrders() : null);
+    }
+
+    public SportsMatchView updateMeta(String matchCode, SportsMatchMetaRequest req) {
+        SportsMatch match = matchRepository.findByCode(matchCode)
+                .orElseThrow(() -> new com.girisk.common.exception.BusinessException("比赛不存在: " + matchCode));
+        if (req == null) {
+            return toView(match);
+        }
+        matchRepository.updateDisplayMeta(
+                matchCode,
+                req.homeTeam(),
+                req.awayTeam(),
+                req.sportCode() != null ? req.sportCode() : match.sportOrDefault(),
+                req.leagueCode(),
+                req.leagueName());
+        return getMatchView(matchCode);
+    }
+
     public SportsDashboardSummary buildDashboard() {
+        matchSyncService.syncFromRedis();
         List<SportsMatch> matches = matchRepository.findAll();
         int outcomeCount = 0;
         int overLimitOutcomeCount = 0;
@@ -68,7 +179,9 @@ public class SportsExposureService {
                     if (row.stake().compareTo(row.maxAllowedAmount()) > 0) {
                         overLimitOutcomeCount++;
                         overItems.add(new SportsDashboardSummary.OverLimitOutcomeItem(
-                                view.matchCode(), view.homeTeam(), view.awayTeam(),
+                                view.matchCode(),
+                                nullToDash(view.homeTeam()),
+                                nullToDash(view.awayTeam()),
                                 group.marketType(), group.marketLabel(), group.line(), row.selection(),
                                 row.stake(), row.maxAllowedAmount()));
                     }
@@ -173,11 +286,15 @@ public class SportsExposureService {
 
         return new SportsMatchView(
                 match.id(), match.matchCode(), match.homeTeam(), match.awayTeam(),
-                match.sportOrDefault(), match.leagueCodeOrDefault(), match.leagueNameOrDefault(),
+                match.sportOrDefault(), match.leagueCode(), match.leagueName(),
                 params.maxWorstLossYuan(), match.limitMode(), exposure, deltaBd,
                 seed, params.maxWorstLossYuan(), params.maxBetPayoutYuan(),
                 params.overrideActive(),
                 match.status(), match.lastCheckAt(), groups);
+    }
+
+    private static String nullToDash(String s) {
+        return s == null || s.isBlank() ? "—" : s;
     }
 
     /**

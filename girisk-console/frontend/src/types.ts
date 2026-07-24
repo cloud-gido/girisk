@@ -351,6 +351,40 @@ export interface SportsMatch {
   lastCheckAt?: string;
 }
 
+/** 敞口值班台列表行（含有效门控 + Redis live） */
+export interface SportsMatchListRow extends SportsMatch {
+  updatedAt?: string;
+  tradingEnabled: boolean;
+  limitGateEnabled: boolean;
+  exposureGateEnabled: boolean;
+  tradingSource?: string;
+  limitGateSource?: string;
+  exposureGateSource?: string;
+  liveScore?: string | null;
+  worstScore?: string | null;
+  worstLossCents?: number | null;
+  riskLevel?: string | null;
+  confirmedOrders?: number | null;
+}
+
+export interface SportsMatchMetaRequest {
+  homeTeam?: string | null;
+  awayTeam?: string | null;
+  sportCode?: string | null;
+  leagueCode?: string | null;
+  leagueName?: string | null;
+}
+
+export interface SportsMatchListQuery {
+  sportCode?: string;
+  leagueCode?: string;
+  matchCode?: string;
+  q?: string;
+  status?: string;
+  limitMode?: boolean;
+  gateOff?: string;
+}
+
 /** 场次限额覆盖：有效值 + 原始覆盖字段 */
 export interface FixtureLimitParamsView {
   matchCode: string;

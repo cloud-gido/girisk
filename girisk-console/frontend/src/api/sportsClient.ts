@@ -1,9 +1,35 @@
 import { request } from './http';
 
+function qs(params: Record<string, string | boolean | undefined | null>): string {
+  const sp = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') return;
+    sp.set(k, String(v));
+  });
+  const s = sp.toString();
+  return s ? `?${s}` : '';
+}
+
 export const sportsApi = {
   dashboard: () => request<import('../types').SportsDashboardSummary>('/sports/dashboard'),
-  matches: () => request<import('../types').SportsMatch[]>('/sports/matches'),
+  matches: (query?: import('../types').SportsMatchListQuery) =>
+    request<import('../types').SportsMatchListRow[]>(
+      `/sports/matches${qs({
+        sportCode: query?.sportCode,
+        leagueCode: query?.leagueCode,
+        matchCode: query?.matchCode,
+        q: query?.q,
+        status: query?.status,
+        limitMode: query?.limitMode,
+        gateOff: query?.gateOff,
+      })}`,
+    ),
   match: (code: string) => request<import('../types').SportsMatchView>(`/sports/matches/${code}`),
+  updateMatchMeta: (code: string, body: import('../types').SportsMatchMetaRequest) =>
+    request<import('../types').SportsMatchView>(`/sports/matches/${encodeURIComponent(code)}/meta`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
   exposureCheck: (code: string) =>
     request<import('../types').SportsMatchView>(`/sports/matches/${code}/exposure-check`, { method: 'POST' }),
   getLimitOverride: (code: string) =>

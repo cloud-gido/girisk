@@ -31,4 +31,9 @@ public record SportsMatch(
     public String leagueNameOrDefault() {
         return leagueName == null || leagueName.isBlank() ? "未分组联赛" : leagueName;
     }
+
+    /** 展示用：空/UNKNOWN 视为未填。 */
+    public boolean hasDisplayTeams() {
+        return homeTeam != null && !homeTeam.isBlank() && awayTeam != null && !awayTeam.isBlank();
+    }
 }
