@@ -1,0 +1,31 @@
+{
+  "envelopeVersion": 1,
+  "eventType": "OrderRiskCheckEvent",
+  "eventId": "tr-demo-ORD-LIVE",
+  "operatorId": "1001",
+  "aggregateId": "ORD-LIVE-DEMO",
+  "payload": {
+    "orderId": "ORD-LIVE-DEMO",
+    "status": "PENDING",
+    "phase": "PRE_CONFIRM",
+    "betType": "SINGLE",
+    "betTime": "2026-07-18T08:00:00Z",
+    "playerId": "U-demo",
+    "stake": 100,
+    "sportCode": "football",
+    "leagueCode": "LALIGA",
+    "legs": [
+      {
+        "fixtureId": "MATCH-002",
+        "price": 2.1,
+        "leagueCode": "LALIGA",
+        "homeTeam": "皇马",
+        "awayTeam": "巴萨",
+        "legPick": {
+          "type": "1X2",
+          "side": "HOME"
+        }
+      }
+    ]
+  }
+}

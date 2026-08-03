@@ -1,0 +1,132 @@
+# Push Console image to GHCR (aligned with giso/gido).
+# Image:
+#   ghcr.io/<owner>/<repo>/girisk-console:<tag>
+#
+# 公开 GitHub 树通常不含 Engine（由 scripts/sync-github.sh 从 GitLab 全量仓导出）。
+# Engine jar 在内网用 gido 实时作业提交。
+
+name: docker-publish
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      image_version:
+        description: 'Extra immutable tag for girisk-console (e.g. 0.1)'
+        required: false
+        type: string
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_USER: ${{ github.repository_owner }}
+
+jobs:
+  maven-ci:
+    name: Maven verify (console)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: girisk-console/frontend/package-lock.json
+
+      - name: Build Console frontend
+        working-directory: girisk-console/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Maven package console
+        run: mvn -B -pl girisk-console -am -DskipTests package
+
+  docker-images:
+    name: Build and push girisk-console to GHCR
+    needs: maven-ci
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.REGISTRY_USER }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (console)
+        id: meta_console
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/girisk-console
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
+            type=raw,value=${{ inputs.image_version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.image_version != '' }}
+
+      # amd64 原生 + arm64（Jar 可跨架构；frontend 在 Dockerfile 用 BUILDPLATFORM 只编一次）
+      # 若仍超时，可改为 platforms: linux/amd64
+      - name: Build and push girisk-console
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.console
+          push: true
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          tags: ${{ steps.meta_console.outputs.tags }}
+          labels: ${{ steps.meta_console.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NODE_IMAGE=node:22-alpine
+            MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
+            JRE_IMAGE=eclipse-temurin:21-jre-alpine
+
+      - name: Verify console image serves /login
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/girisk-console:latest"
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VER="${GITHUB_REF_NAME#v}"
+            IMAGE="${{ env.REGISTRY }}/${{ github.repository }}/girisk-console:${VER}"
+          fi
+          docker pull --platform linux/amd64 "$IMAGE"
+          cid=$(docker run -d -p 18088:8080 \
+            -e SERVER_PORT=8080 \
+            -e SPRING_PROFILES_ACTIVE=local \
+            "$IMAGE")
+          trap 'docker rm -f "$cid"' EXIT
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:18088/login >/dev/null && exit 0
+            sleep 3
+          done
+          echo "::error::console /login check failed"
+          docker logs "$cid"
+          exit 1

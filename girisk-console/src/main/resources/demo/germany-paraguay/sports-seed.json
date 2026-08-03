@@ -1,0 +1,24 @@
+{
+  "matchCode" : "germany-paraguay",
+  "homeTeam" : "Germany",
+  "awayTeam" : "Paraguay",
+  "sportCode" : "football",
+  "leagueCode" : "FRIENDLY",
+  "leagueName" : "国际友谊",
+  "delta" : 0.2,
+  "exposureThreshold" : 200000.0,
+  "groups" : [ {
+    "marketType" : "ONE_X_TWO",
+    "line" : "",
+    "stakes" : {
+      "home" : 84992.72,
+      "draw" : 23162.01,
+      "away" : 21739.23
+    },
+    "payouts" : {
+      "home" : 149686.3,
+      "draw" : 72730.67,
+      "away" : 149557.71
+    }
+  } ]
+}

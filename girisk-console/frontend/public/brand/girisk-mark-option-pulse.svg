@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GiRisk mark option pulse">
+  <!-- 同系：暖/冷渐变光环 + 星点连线；语义：风险波形（星脉） -->
+  <defs>
+    <linearGradient id="gr-orbit-warm" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#ffd8a8"/>
+      <stop offset="50%" stop-color="#ffb86a"/>
+      <stop offset="100%" stop-color="#ffa94d"/>
+    </linearGradient>
+    <linearGradient id="gr-orbit-cool" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="55%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <radialGradient id="gr-star-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#a5b4fc"/>
+    </radialGradient>
+  </defs>
+  <path fill="none" stroke="url(#gr-orbit-warm)" stroke-width="2.4" stroke-linecap="round"
+        d="M10 42 C 14 16, 34 8, 52 22"/>
+  <path fill="none" stroke="url(#gr-orbit-cool)" stroke-width="2.4" stroke-linecap="round"
+        d="M52 22 C 60 34, 56 54, 28 56 C 14 57, 6 50, 10 42"/>
+  <!-- pulse constellation -->
+  <g stroke="#93c5fd" stroke-width="0.85" stroke-linecap="round" opacity="0.55">
+    <path d="M18 36 L24 36 L28 26 L34 42 L40 32 L46 32"/>
+  </g>
+  <circle cx="18" cy="36" r="1.35" fill="#ffb86a"/>
+  <circle cx="24" cy="36" r="1.15" fill="#ffd8a8"/>
+  <circle cx="28" cy="26" r="1.4" fill="#818cf8"/>
+  <circle cx="34" cy="42" r="1.35" fill="#60a5fa"/>
+  <circle cx="40" cy="32" r="1.2" fill="#bae6fd"/>
+  <circle cx="46" cy="32" r="1.1" fill="#ffa94d" opacity="0.95"/>
+  <g transform="translate(46,14)">
+    <path fill="url(#gr-star-glow)" d="M0 -5 L1.4 -1.5 L5 -1.5 L2.2 0.7 L3.4 4.2 L0 2 L-3.4 4.2 L-2.2 0.7 L-5 -1.5 L-1.4 -1.5 Z"/>
+  </g>
+  <path fill="#a5b4fc" transform="translate(14,40) scale(0.45)"
+        d="M0 -4 L1.2 -1.2 L4 -1.2 L1.6 0.6 L2.4 3.4 L0 1.8 L-2.4 3.4 L-1.6 0.6 L-4 -1.2 L-1.2 -1.2 Z"/>
+</svg>

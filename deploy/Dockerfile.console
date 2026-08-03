@@ -1,0 +1,61 @@
+# GiRisk Console — 多阶段构建（Node → Maven → JRE）
+# 用法（仓库根）:
+#   docker build -f deploy/Dockerfile.console -t girisk-console:local .
+#
+# 构建参数可覆盖国内镜像，例如:
+#   --build-arg NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine
+#   --build-arg MAVEN_IMAGE=docker.m.daocloud.io/library/maven:3.9-eclipse-temurin-21
+#   --build-arg JRE_IMAGE=docker.m.daocloud.io/library/eclipse-temurin:21-jre-alpine
+#
+# 多架构注意：frontend 必须用 $BUILDPLATFORM（宿主原生），禁止在 QEMU 下跑 npm
+# （GHA amd64 构建 arm64 时 QEMU 常 Illegal instruction / 卡死）。
+
+ARG NODE_IMAGE=node:22-alpine
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
+ARG JRE_IMAGE=eclipse-temurin:21-jre-alpine
+
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
+WORKDIR /fe
+RUN npm config set registry https://registry.npmmirror.com
+COPY girisk-console/frontend/package.json girisk-console/frontend/package-lock.json* ./
+RUN npm ci
+COPY girisk-console/frontend/ ./
+RUN npm run build
+
+FROM ${MAVEN_IMAGE} AS build
+WORKDIR /src
+COPY deploy/maven/settings.xml /root/.m2/settings.xml
+COPY pom.xml ./
+COPY girisk-common/pom.xml girisk-common/pom.xml
+COPY girisk-console/pom.xml girisk-console/pom.xml
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-console -am dependency:go-offline -DskipTests && break; \
+      echo "[console-build] dependency retry $i..."; sleep 5; \
+    done || true
+
+COPY girisk-common/ girisk-common/
+COPY girisk-console/ girisk-console/
+COPY --from=frontend /fe/dist /src/girisk-console/frontend/dist
+RUN for i in 1 2 3; do \
+      mvn -q -pl girisk-console -am package -DskipTests && exit 0; \
+      echo "[console-build] package retry $i..."; sleep 5; \
+    done; \
+    exit 1
+
+FROM ${JRE_IMAGE}
+WORKDIR /app
+
+RUN apk add --no-cache wget \
+    && addgroup -S girisk && adduser -S girisk -G girisk \
+    && chown -R girisk:girisk /app
+
+COPY --from=build /src/girisk-console/target/girisk-console-1.0.0.jar /app/app.jar
+USER girisk
+
+ENV SERVER_PORT=8080
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget -q -O- http://127.0.0.1:8080/login >/dev/null || exit 1
+
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

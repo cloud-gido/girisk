@@ -1,0 +1,29 @@
+# Paths excluded when syncing this monorepo to public GitHub.
+# Internal GitLab keeps the full tree. Do NOT put these in .gitignore —
+# ignored files are untracked on BOTH remotes (GitLab would lose them too).
+#
+# Used by: scripts/sync-github.sh
+#
+# Engine 相关一律不公开（模块、Flink 部署、引擎设计/评审/演示）。
+
+girisk-engine/
+deploy/flink/
+deploy/Dockerfile.engine
+docs/football-order-risk-pipeline-design.md
+docs/football-order-risk-limit-first-design.md
+docs/football-order-risk-engine-technical-review.md
+docs/DEMO-EXPOSURE.md
+docs/risk-decision-platform-solution.md
+scripts/demo-germany-exposure.sh
+target/
+**/target/
+**/node_modules/
+.git/
+.idea/
+*.iml
+logs/
+.girisk.pid
+# 仅排除仓库根误解压的 debris（勿写 com/，会误伤 **/java/com/**）
+/com/
+*.class
+docs/private/

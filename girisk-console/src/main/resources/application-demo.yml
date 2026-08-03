@@ -1,0 +1,10 @@
+# Optional demo/seed dataset for UI walkthroughs. Not used in clean pipeline.
+spring:
+  sql:
+    init:
+      mode: always
+      data-locations: classpath:data.sql,classpath:data-demo.sql
+
+girisk:
+  demo-data:
+    enabled: true

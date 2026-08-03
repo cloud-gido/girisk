@@ -1,0 +1,4 @@
+# 已迁至仓库根 deploy/Dockerfile.console
+#   docker build -f deploy/Dockerfile.console -t girisk-console:local .
+FROM scratch
+LABEL org.opencontainers.image.description="Use deploy/Dockerfile.console from repo root"

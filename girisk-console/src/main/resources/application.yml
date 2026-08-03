@@ -1,0 +1,117 @@
+server:
+  port: ${SERVER_PORT:18088}
+
+spring:
+  application:
+    name: girisk-console
+  datasource:
+    # Console 元库：PostgreSQL 16（GIDO 家族）；Doris 审计仍走 MySQL 协议见 girisk.audit.doris
+    # girisk.datasource.jdbc-url 由 DatasourceUrlEnvironmentPostProcessor 写入（含 jdbc: 前缀）
+    url: ${girisk.datasource.jdbc-url:${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/girisk}}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:girisk}
+    password: ${SPRING_DATASOURCE_PASSWORD:girisk}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+      continue-on-error: true
+      schema-locations: classpath:schema.sql
+      # data.sql is intentionally empty (clean pipeline). Use profile "demo" for samples.
+      data-locations: classpath:data.sql
+  data:
+    redis:
+      # 连接权威：GiriskRedisConnectionConfiguration（RedisConnectionDetails）
+      # URL 请用 SPRING_DATA_REDIS_URL=rediss://:token@host/0；勿设空的 REDIS_HOST=
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # 短超时：失败快失败，避免拖死 Kafka poll 被踢出组
+      timeout: ${REDIS_TIMEOUT:1s}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:1s}
+      lettuce:
+        shutdown-timeout: 200ms
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:girisk-console-stream}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:50}
+      properties:
+        max.poll.interval.ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+        session.timeout.ms: ${KAFKA_SESSION_TIMEOUT_MS:45000}
+        heartbeat.interval.ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+    admin:
+      fail-fast: false
+    listener:
+      missing-topics-fatal: false
+
+girisk:
+  demo-data:
+    enabled: ${GIRISK_DEMO_DATA_ENABLED:false}
+  jwt:
+    secret: ${JWT_SECRET:girisk-jwt-secret-key-change-in-production-min-32-chars}
+    # 默认 8 小时；登出/改密会吊销。可用 JWT_EXPIRY_HOURS 覆盖
+    expiry-hours: ${JWT_EXPIRY_HOURS:8}
+  internal-api-key: ${INTERNAL_API_KEY:girisk-internal-api-key}
+  redis:
+    enabled: ${REDIS_ENABLED:true}
+    velocity-ttl-hours: 24
+  sports:
+    # false = Flink 为体育裁决权威；本仓 HTTP decide 仅跑用户规则（调试可开 true）
+    online-decide-enabled: ${SPORTS_ONLINE_DECIDE_ENABLED:false}
+    exposure-check-cron: ${SPORTS_EXPOSURE_CRON:0 */5 * * * *}
+    default-delta: ${SPORTS_DEFAULT_DELTA:0.2}
+    seed-payout-yuan: ${SPORTS_SEED_PAYOUT_YUAN:5000}
+    max-worst-loss-yuan: ${SPORTS_MAX_WORST_LOSS_YUAN:200000}
+    # 单注最大返彩（元）；0 = 关闭全局单注上限（场次覆盖仍可单独开启）
+    max-bet-payout-yuan: ${SPORTS_MAX_BET_PAYOUT_YUAN:0}
+    reserve-ttl-seconds: ${SPORTS_RESERVE_TTL_SECONDS:30}
+    limit-decision-enabled: ${SPORTS_LIMIT_DECISION_ENABLED:true}
+  tenant:
+    enforce: ${GIRISK_TENANT_ENFORCE:false}
+  review:
+    callback-url: ${GIRISK_REVIEW_CALLBACK_URL:}
+  audit:
+    doris:
+      # Kafka → Doris 后回放优先读 FE:9030；失败回退 PostgreSQL。
+      # 页面（ADMIN）可写 Redis 覆盖层 girisk:config:audit:doris 热加载；env 为 bootstrap。
+      enabled: ${GIRISK_AUDIT_DORIS_ENABLED:false}
+      jdbc-url: ${GIRISK_AUDIT_DORIS_JDBC_URL:jdbc:mysql://localhost:9030/girisk?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      username: ${GIRISK_AUDIT_DORIS_USERNAME:root}
+      password: ${GIRISK_AUDIT_DORIS_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:10.0.0.10:30992}
+    order-topic: ${KAFKA_ORDER_TOPIC:girisk.order.event}
+    decision-topic: ${KAFKA_DECISION_TOPIC:girisk.decision.event}
+    flink-decision-topic: ${KAFKA_FLINK_DECISION_TOPIC:girisk.decision.v1}
+    config-topic: ${KAFKA_CONFIG_TOPIC:girisk.config.v1}
+    status-topic: ${KAFKA_STATUS_TOPIC:girisk.trading.order.risk-check.post.v1}
+    consumer-group: ${KAFKA_CONSUMER_GROUP:girisk-console-stream}
+    flink-decision-group: ${KAFKA_FLINK_DECISION_GROUP:girisk-console-flink-decision}
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:3}
+    topic-replicas: ${KAFKA_TOPIC_REPLICAS:1}
+    config-publish-timeout-seconds: ${KAFKA_CONFIG_PUBLISH_TIMEOUT_SECONDS:10}
+    config-publish-max-attempts: ${KAFKA_CONFIG_PUBLISH_MAX_ATTEMPTS:5}
+    config-publish-backoff-ms: ${KAFKA_CONFIG_PUBLISH_BACKOFF_MS:400}
+    config-bootstrap-sync-enabled: ${KAFKA_CONFIG_BOOTSTRAP_SYNC:true}
+    config-outbox-enabled: ${KAFKA_CONFIG_OUTBOX_ENABLED:true}
+    config-outbox-poll-ms: ${KAFKA_CONFIG_OUTBOX_POLL_MS:500}
+    config-outbox-batch-size: ${KAFKA_CONFIG_OUTBOX_BATCH_SIZE:32}
+    config-outbox-max-attempts: ${KAFKA_CONFIG_OUTBOX_MAX_ATTEMPTS:20}
+    consumer-max-poll-records: ${KAFKA_MAX_POLL_RECORDS:50}
+    consumer-max-poll-interval-ms: ${KAFKA_MAX_POLL_INTERVAL_MS:300000}
+    consumer-session-timeout-ms: ${KAFKA_SESSION_TIMEOUT_MS:45000}
+    consumer-heartbeat-interval-ms: ${KAFKA_HEARTBEAT_INTERVAL_MS:3000}
+    decision-ingest-max-attempts: ${KAFKA_DECISION_INGEST_MAX_ATTEMPTS:3}
+
+logging:
+  level:
+    com.girisk: INFO
+    org.apache.kafka: WARN

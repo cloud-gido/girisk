@@ -1,0 +1,13 @@
+**/node_modules
+**/target
+.git
+.github
+.idea
+**/*.iml
+data
+logs
+.girisk.pid
+**/dist
+**/.DS_Store
+**/tsconfig.tsbuildinfo
+agent-transcripts

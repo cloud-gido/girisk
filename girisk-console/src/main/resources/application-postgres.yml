@@ -1,0 +1,19 @@
+# PostgreSQL 联调/生产 profile（对齐 GIDO：postgres:16 / RDS PG16）
+# URL 优先由 DatasourceUrlEnvironmentPostProcessor 从 SPRING_DATASOURCE_URL / POSTGRES_HOST 注入
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:girisk}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:girisk}}
+  sql:
+    init:
+      mode: ${SQL_INIT_MODE:always}
+      continue-on-error: true
+
+girisk:
+  redis:
+    enabled: ${REDIS_ENABLED:true}
+  kafka:
+    enabled: ${KAFKA_ENABLED:true}
+  tenant:
+    enforce: false
